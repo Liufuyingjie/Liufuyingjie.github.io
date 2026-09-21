@@ -11,6 +11,7 @@ function normalizeApiBaseUrl(value: string) {
 export default function EditPaperButton({ slug }: { slug: string }) {
   const [ready, setReady] = useState(true);
   const [token, setToken] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
 
   useEffect(() => {
     const existing = localStorage.getItem("yingjie-research-session");
@@ -35,9 +36,11 @@ export default function EditPaperButton({ slug }: { slug: string }) {
   }, []);
 
   const startLogin = () => {
+    if (loggingIn) return;
+    setLoggingIn(true);
     const apiBaseUrl = normalizeApiBaseUrl(site.apiBaseUrl);
     const returnTo = `${window.location.origin}/papers/${encodeURIComponent(slug)}/edit/`;
-    window.location.href = `${apiBaseUrl}/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+    window.location.assign(`${apiBaseUrl}/auth/login?return_to=${encodeURIComponent(returnTo)}`);
   };
 
   if (!ready) return null;
@@ -52,7 +55,7 @@ export default function EditPaperButton({ slug }: { slug: string }) {
           <path d="m13.8 6.75 3.45 3.45" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
       </span>
-      <span>{buttonLabel}</span>
+      <span>{loggingIn ? "正在验证…" : buttonLabel}</span>
       <span className="edit-paper-arrow" aria-hidden="true">↗</span>
     </>
   );
@@ -66,7 +69,7 @@ export default function EditPaperButton({ slug }: { slug: string }) {
   }
 
   return (
-    <button type="button" className="edit-paper-button" onClick={startLogin}>
+    <button type="button" className="edit-paper-button" onClick={startLogin} disabled={loggingIn}>
       {content}
     </button>
   );

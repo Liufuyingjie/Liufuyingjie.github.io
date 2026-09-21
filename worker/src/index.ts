@@ -43,7 +43,7 @@ function corsHeaders(request: Request, env: Env) {
   const origin = request.headers.get("Origin") || "";
   const allowed = env.ALLOWED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
   const headers = new Headers({
-    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Research-Notes-Request",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
@@ -238,14 +238,24 @@ async function githubRequest(path: string, init: RequestInit = {}, token?: strin
 }
 
 function validReturnTo(value: string | null, env: Env) {
-  const fallback = `${env.SITE_ORIGIN.replace(/\/$/, "")}/new/`;
+  const siteOrigin = env.SITE_ORIGIN.replace(/\/$/, "");
+  const fallback = `${siteOrigin}/new/`;
   if (!value) return fallback;
+
   try {
     const url = new URL(value);
-    const allowed = env.ALLOWED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
-    if (!allowed.includes(url.origin)) return fallback;
-    const allowedPath = url.pathname === "/new/" || url.pathname === "/new" || /^\/papers\/[a-z0-9-]+\/edit\/?$/.test(url.pathname);
-    if (!allowedPath) return fallback;
+    const allowed = env.ALLOWED_ORIGINS
+      .split(",")
+      .map((item) => item.trim().replace(/\/$/, "").toLowerCase())
+      .filter(Boolean);
+
+    if (!allowed.includes(url.origin.replace(/\/$/, "").toLowerCase())) return fallback;
+
+    const pathname = url.pathname.replace(/\/$/, "") || "/";
+    const isNewPaper = pathname === "/new";
+    const isEditPaper = /^\/papers\/[a-z0-9-]+\/edit$/i.test(pathname);
+
+    if (!isNewPaper && !isEditPaper) return fallback;
     return url.toString();
   } catch {
     return fallback;
@@ -483,104 +493,6 @@ export default {
         }, 201);
       } catch (error) {
         return json(request, env, { error: error instanceof Error ? error.message : "保存论文时发生未知错误。" }, 502);
-      }
-    }
-
-    if (url.pathname.startsWith("/api/papers/") && method === "PUT") {
-      const session = await verifySession(request, env);
-      if (!session) return unauthorized(request, env);
-
-      if (request.headers.get("X-Research-Notes-Request") !== "edit-paper") {
-        return json(request, env, { error: "缺少请求校验头。" }, 403);
-      }
-
-      const slug = decodeURIComponent(url.pathname.slice("/api/papers/".length)).trim();
-      if (!/^[a-z0-9-]{1,140}$/.test(slug)) {
-        return json(request, env, { error: "论文标识无效。" }, 400);
-      }
-
-      let input: PaperInput;
-      try {
-        input = await request.json() as PaperInput;
-      } catch {
-        return json(request, env, { error: "提交的数据不是有效 JSON。" }, 400);
-      }
-
-      if (!input || typeof input.title !== "string" || !input.title.trim()) {
-        return json(request, env, { error: "论文标题不能为空。" }, 400);
-      }
-
-      const normalized: PaperInput = {
-        title: String(input.title || "").trim(),
-        subtitle: String(input.subtitle || "").trim(),
-        journal: String(input.journal || "").trim(),
-        year: String(input.year || "").trim(),
-        authors: String(input.authors || "").trim(),
-        affiliation: String(input.affiliation || "").trim(),
-        code: String(input.code || "").trim(),
-        task: String(input.task || "").trim(),
-        model: String(input.model || "").trim(),
-        problem: String(input.problem || "").trim(),
-        solution: String(input.solution || "").trim(),
-        pipeline: String(input.pipeline || "").trim(),
-        innovations: String(input.innovations || "").trim(),
-        experiments: String(input.experiments || "").trim(),
-        extensions: String(input.extensions || "").trim(),
-      };
-
-      if (normalized.title.length > 300) return json(request, env, { error: "论文标题过长。" }, 400);
-
-      const path = `content/papers/${slug}.md`;
-      const content = buildMarkdown(normalized, slug);
-
-      try {
-        const token = await getInstallationToken(env);
-        const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-        const currentResponse = await githubRequest(
-          `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/contents/${encodedPath}?ref=main`,
-          { method: "GET" },
-          token,
-        );
-
-        if (currentResponse.status === 404) {
-          return json(request, env, { error: "找不到这篇论文，可能已经被删除。" }, 404);
-        }
-        if (!currentResponse.ok) {
-          return json(request, env, { error: `读取原论文失败（${currentResponse.status}）。` }, 502);
-        }
-
-        const currentFile = await currentResponse.json() as { sha?: string };
-        if (!currentFile.sha) {
-          return json(request, env, { error: "无法获取原论文的版本标识。" }, 502);
-        }
-
-        const response = await githubRequest(
-          `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/contents/${encodedPath}`,
-          {
-            method: "PUT",
-            body: JSON.stringify({
-              message: `Update paper note: ${normalized.title}`,
-              content: encodeRepoContent(content),
-              sha: currentFile.sha,
-              branch: "main",
-            }),
-          },
-          token,
-        );
-
-        const result = await response.json().catch(() => ({})) as { content?: { path?: string }; commit?: { html_url?: string } };
-        if (!response.ok) {
-          return json(request, env, { error: `更新 GitHub 论文失败（${response.status}）。` }, 502);
-        }
-
-        return json(request, env, {
-          ok: true,
-          slug,
-          path: result.content?.path || path,
-          commitUrl: result.commit?.html_url,
-        });
-      } catch (error) {
-        return json(request, env, { error: error instanceof Error ? error.message : "更新论文时发生未知错误。" }, 502);
       }
     }
 

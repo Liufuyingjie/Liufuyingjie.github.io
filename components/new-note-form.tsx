@@ -82,6 +82,7 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
   const [login, setLogin] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loginRedirecting, setLoginRedirecting] = useState(false);
   const [saved, setSaved] = useState<{ path: string; commitUrl?: string } | null>(null);
   const [error, setError] = useState("");
 
@@ -136,8 +137,10 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
   const loginReturnPath = editing && slug ? `/papers/${encodeURIComponent(slug)}/edit/` : "/new/";
 
   const startLogin = () => {
+    if (loginRedirecting) return;
+    setLoginRedirecting(true);
     const returnTo = `${window.location.origin}${loginReturnPath}`;
-    window.location.href = `${apiBaseUrl}/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+    window.location.assign(`${apiBaseUrl}/auth/login?return_to=${encodeURIComponent(returnTo)}`);
   };
 
   const logout = () => {
@@ -235,13 +238,13 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
           <p className="section-label">仅作者可写</p>
           <h2>{editing ? "编辑这篇论文笔记" : "新增一篇论文笔记"}</h2>
           <p>通过 GitHub 验证身份。只有 <strong>@Liufuyingjie</strong> 可以保存或修改本站的论文记录。</p>
-          <button type="button" className="github-login-button" onClick={startLogin}>
+          <button type="button" className="github-login-button" onClick={startLogin} disabled={loginRedirecting}>
             <span className="github-login-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.09.67-3.74-1.3-3.74-1.3-.51-1.29-1.24-1.64-1.24-1.64-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1 1.56-.76 1.94-1.18-.99-.1-2.04-.5-2.04-2.23 0-.5.18-.92.47-1.25-.05-.12-.2-.6.05-1.24 0 0 .93-.3 3.05 1.2.89-.25 1.84-.38 2.79-.38.95 0 1.9.13 2.79.38 2.12-1.5 3.05-1.2 3.05-1.2.25.64.1 1.12.05 1.24.29.33.47.75.47 1.25 0 1.73-1.05 2.12-2.05 2.23.38.42.72 1.25.72 2.53v2.3c0 .31.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/>
               </svg>
             </span>
-            <span>使用 GitHub 登录</span>
+            <span>{loginRedirecting ? "正在前往 GitHub…" : "使用 GitHub 登录"}</span>
             <span className="github-login-arrow" aria-hidden="true">↗</span>
           </button>
           <p className="auth-note">GitHub 仅用于验证你的身份，不会把账号密码提供给本站。</p>
