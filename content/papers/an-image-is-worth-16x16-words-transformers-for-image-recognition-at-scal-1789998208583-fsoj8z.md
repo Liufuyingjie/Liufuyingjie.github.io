@@ -25,15 +25,15 @@ readingStatus: "阅读笔记"
 ## 02 论文要解决的核心问题
 
 CNN天生具有归纳偏置，如平移等变性和局部性，这使得它们在处理图像时非常高效。而Transformer架构缺乏这些先验知识，理论上需要从零开始学习图像的空间结构。
-因此，核心问题是：一个“纯净”的Transformer能否在图像任务中战胜拥有强大先验知识的CNN？如果能够，其关键条件是什么？
+一个“纯净”的Transformer能否在图像任务中战胜拥有强大先验知识的CNN？
 
 ## 03 核心解决方案
 
-ViT的核心思想是将图像转换为Transformer能够处理的“序列”。
+将图像转换为Transformer能够处理的“序列”
 
 ## 04 训练 / 推理完整流程
 
-1、图像分块（Patchify）：
+图像分块（Patchify）：
 将一张输入图像（如 224×224 像素）分割成一个个固定大小的、互不重叠的图像块（Patches）。论文中常见的块大小有 16×16 或 32×32。
 
 线性投影（Linear Projection）：
@@ -48,9 +48,25 @@ ViT的核心思想是将图像转换为Transformer能够处理的“序列”。
 Transformer编码器（Transformer Encoder）：
 将上述带有位置编码的序列（包含 [class] token 和所有图像块嵌入）输入到一个标准的Transformer编码器中。该编码器由多个相同的层堆叠而成，每层包含多头自注意力（Multi-head Self-Attention, MSA） 和MLP前馈网络，并在每个模块前使用层归一化（Layer Norm），每个模块后使用残差连接（Residual Connection）。
 
+输入图像 X
+  ↓
+切 patch，比如 224×224 切成 16×16，得到 196 个 patch
+  ↓
+线性投影，每个 patch 变成一个 token 向量
+  ↓
+加上 class token 和位置编码
+  ↓
+进入 L 层 Transformer
+  ↓
+每层做 MHSA + MLP
+  ↓
+输出最后一层的 class token 和 patch tokens
+  ↓
+检索任务
+
 ## 05 核心创新点
 
-对CNN架构的依赖是没有必要的。一个纯Transformer架构（ViT），当在足够大的数据集上进行预训练时，能够在图像分类任务上达到最先进的水平，同时拥有更高的计算效率。这一工作开创性地将NLP领域的成功范式成功迁移到了视觉领域。
+将 NLP 领域的成功范式成功迁移到了视觉领域
 
 ## 06 实验效果
 
@@ -65,3 +81,4 @@ Transformer编码器（Transformer Encoder）：
 ## 07 适用场景与扩展
 
 计算资源成本高；
+Transformer时间复杂度为O（n2）；
