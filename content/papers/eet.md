@@ -1,8 +1,8 @@
 ---
-slug: eet
+slug: "eet"
 title: "Rethinking Vision Transformer for Large-Scale Fine-Grained Image Retrieval"
 subtitle: "重新思考视觉 Transformer 用于大规模细粒度图像检索"
-eyebrow: "Paper Note · 01"
+eyebrow: "Paper Note · 2026"
 date: "2026"
 year: "2026 · Vol. 28"
 journal: "IEEE Transactions on Multimedia (TMM)"
@@ -14,27 +14,23 @@ model: "EET（Efficient and Effective ViT）"
 readingStatus: "阅读笔记"
 ---
 
-# Rethinking Vision Transformer for Large-Scale Fine-Grained Image Retrieval
-
 ## 01 论文基础信息
 
-| 项目 | 内容 |
-| --- | --- |
-| 论文标题 | Rethinking Vision Transformer for Large-Scale Fine-Grained Image Retrieval |
-| 中文标题 | 重新思考视觉 Transformer 用于大规模细粒度图像检索 |
-| 发表期刊 | IEEE Transactions on Multimedia (TMM) |
-| 发表年份 / 卷期 | 2026 · Vol. 28 |
-| 作者 | Xin Jiang, Hao Tang, Yonghua Pan, Zechao Li（通讯作者） |
-| 单位 | 南京理工大学、香港理工大学、广西科学院 |
-| 开源代码 | [GitHub](https://github.com/WhiteJiang/EET) |
-| 核心任务 | 大规模细粒度图像检索 + 深度哈希 + ViT 高效化 |
-| 模型名称 | EET（Efficient and Effective ViT） |
+- **论文标题：** Rethinking Vision Transformer for Large-Scale Fine-Grained Image Retrieval
+- **中文标题：** 重新思考视觉 Transformer 用于大规模细粒度图像检索
+- **发表期刊：** IEEE Transactions on Multimedia (TMM)
+- **发表年份 / 卷期：** 2026 · Vol. 28
+- **作者：** Xin Jiang, Hao Tang, Yonghua Pan, Zechao Li（通讯作者）
+- **单位：** 南京理工大学、香港理工大学、广西科学院
+- **开源代码：** https://github.com/WhiteJiang/EET
+- **核心任务：** 大规模细粒度图像检索 + 深度哈希 + ViT 高效化
+- **模型名称：** EET（Efficient and Effective ViT）
 
 ## 02 论文要解决的核心问题
 
 在这里记录作者真正试图解决的研究问题。重点回答：现有方法为什么不够、瓶颈在哪里，以及这个问题为什么会影响大规模细粒度图像检索。
 
-建议阅读时把“现象—原因—后果”写清楚，而不是只复述摘要。
+建议阅读时把“现象—原因—后果”写清楚，而不是只复述摘要。111
 
 ## 03 核心解决方案
 
