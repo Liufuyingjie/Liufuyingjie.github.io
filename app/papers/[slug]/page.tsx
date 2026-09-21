@@ -14,7 +14,6 @@ export const dynamicParams = false;
 const markdown = new Marked({
   gfm: true,
   breaks: true,
-  html: false,
 });
 
 function renderMarkdown(value: string) {
