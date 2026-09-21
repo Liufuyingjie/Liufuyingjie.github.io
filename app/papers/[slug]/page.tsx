@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Marked } from "marked";
 import ThemeToggle from "../../../components/theme-toggle";
+import EditPaperButton from "../../../components/edit-paper-button";
 import { getPaper, getAllPapers } from "../../../data/papers";
 import { site } from "../../../data/site";
 
@@ -47,10 +48,13 @@ export default async function PaperPage({ params }: { params: Promise<{ slug: st
           </div>
           <h1>{paper.title}</h1>
           {paper.subtitle && <p className="paper-subtitle">{paper.subtitle}</p>}
-          <div className="paper-header-meta">
-            <span>{paper.readingStatus}</span>
-            <span>·</span>
-            <span>{paper.date}</span>
+          <div className="paper-header-actions">
+            <div className="paper-header-meta">
+              <span>{paper.readingStatus}</span>
+              <span>·</span>
+              <span>{paper.date}</span>
+            </div>
+            <EditPaperButton slug={paper.slug} />
           </div>
         </header>
 

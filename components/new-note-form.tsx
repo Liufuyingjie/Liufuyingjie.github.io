@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { site } from "../data/site";
 
-type FormState = {
+export type PaperFormState = {
   title: string;
   subtitle: string;
   journal: string;
@@ -22,7 +22,7 @@ type FormState = {
   extensions: string;
 };
 
-const initial: FormState = {
+export const emptyPaperForm: PaperFormState = {
   title: "",
   subtitle: "",
   journal: "",
@@ -69,8 +69,15 @@ function normalizeApiBaseUrl(value: string) {
   return value.replace(/\/$/, "");
 }
 
-export default function NewNoteForm() {
-  const [form, setForm] = useState<FormState>(initial);
+type NewNoteFormProps = {
+  mode?: "new" | "edit";
+  slug?: string;
+  initialForm?: PaperFormState;
+};
+
+export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPaperForm }: NewNoteFormProps) {
+  const editing = mode === "edit";
+  const [form, setForm] = useState<PaperFormState>(initialForm);
   const [token, setToken] = useState<string | null>(null);
   const [login, setLogin] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -122,12 +129,14 @@ export default function NewNoteForm() {
       .finally(() => setAuthLoading(false));
   }, [apiBaseUrl, configured]);
 
-  const set = (key: keyof FormState) => (value: string) => {
+  const set = (key: keyof PaperFormState) => (value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const loginReturnPath = editing && slug ? `/papers/${encodeURIComponent(slug)}/edit/` : "/new/";
+
   const startLogin = () => {
-    const returnTo = `${window.location.origin}/new/`;
+    const returnTo = `${window.location.origin}${loginReturnPath}`;
     window.location.href = `${apiBaseUrl}/auth/login?return_to=${encodeURIComponent(returnTo)}`;
   };
 
@@ -155,15 +164,20 @@ export default function NewNoteForm() {
       setError("还没有配置后端地址，请先在 data/site.ts 中填写 Cloudflare Worker 地址。 ");
       return;
     }
+    if (editing && !slug) {
+      setError("缺少论文标识，无法编辑。 ");
+      return;
+    }
 
     setSaving(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/papers`, {
-        method: "POST",
+      const endpoint = editing ? `${apiBaseUrl}/api/papers/${encodeURIComponent(slug as string)}` : `${apiBaseUrl}/api/papers`;
+      const response = await fetch(endpoint, {
+        method: editing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "X-Research-Notes-Request": "save-paper",
+          "X-Research-Notes-Request": editing ? "edit-paper" : "save-paper",
         },
         body: JSON.stringify(form),
       });
@@ -175,13 +189,13 @@ export default function NewNoteForm() {
           setToken(null);
           setLogin(null);
         }
-        throw new Error(data.error || "保存失败，请稍后重试。 ");
+        throw new Error(data.error || (editing ? "更新失败，请稍后重试。" : "保存失败，请稍后重试。 "));
       }
 
       setSaved({ path: data.path, commitUrl: data.commitUrl });
-      setForm(initial);
+      if (!editing) setForm(emptyPaperForm);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败，请稍后重试。 ");
+      setError(err instanceof Error ? err.message : (editing ? "更新失败，请稍后重试。" : "保存失败，请稍后重试。 "));
     } finally {
       setSaving(false);
     }
@@ -210,8 +224,8 @@ export default function NewNoteForm() {
         <span className="auth-mark">01</span>
         <div>
           <p className="section-label">仅作者可写</p>
-          <h2>使用 GitHub 登录后新增</h2>
-          <p>只有 GitHub 账号 <strong>Liufuyingjie</strong> 可以把论文真正写入这个网站的仓库。</p>
+          <h2>{editing ? "使用 GitHub 登录后编辑" : "使用 GitHub 登录后新增"}</h2>
+          <p>只有 GitHub 账号 <strong>Liufuyingjie</strong> 可以修改这个网站的论文记录。</p>
           <button type="button" className="primary-button auth-button" onClick={startLogin}>
             使用 GitHub 登录 <span>↗</span>
           </button>
@@ -219,6 +233,15 @@ export default function NewNoteForm() {
       </div>
     );
   }
+
+  const sections: Array<[string, string, keyof PaperFormState, string]> = [
+    ["02", "论文要解决的核心问题", "problem", "记录现有方法的不足、具体瓶颈，以及作者为什么要解决这个问题。"],
+    ["03", "核心解决方案", "solution", "按照模块拆解整篇方法，用自己的话说明它是怎么解决问题的。"],
+    ["04", "训练 / 推理完整流程", "pipeline", "从输入开始写清训练与推理的完整路径、损失函数和检索流程。"],
+    ["05", "核心创新点", "innovations", "记录关键设计，并说明每个设计解决了什么问题。"],
+    ["06", "实验效果", "experiments", "写清数据集、指标、baseline、性能变化以及消融实验。"],
+    ["07", "适用场景与扩展", "extensions", "记录适用范围、局限、可迁移设计，以及读完后的疑问。"],
+  ];
 
   return (
     <form className="new-note-form" onSubmit={handleSubmit}>
@@ -251,14 +274,7 @@ export default function NewNoteForm() {
         </div>
       </div>
 
-      {[
-        ["02", "论文要解决的核心问题", "problem", "记录现有方法的不足、具体瓶颈，以及作者为什么要解决这个问题。"],
-        ["03", "核心解决方案", "solution", "按照模块拆解整篇方法，用自己的话说明它是怎么解决问题的。"],
-        ["04", "训练 / 推理完整流程", "pipeline", "从输入开始写清训练与推理的完整路径、损失函数和检索流程。"],
-        ["05", "核心创新点", "innovations", "记录关键设计，并说明每个设计解决了什么问题。"],
-        ["06", "实验效果", "experiments", "写清数据集、指标、baseline、性能变化以及消融实验。"],
-        ["07", "适用场景与扩展", "extensions", "记录适用范围、局限、可迁移设计，以及读完后的疑问。"],
-      ].map(([number, title, key, placeholder]) => (
+      {sections.map(([number, title, key, placeholder]) => (
         <div className="form-section" key={number}>
           <div className="form-section-heading">
             <span>{number}</span>
@@ -269,8 +285,8 @@ export default function NewNoteForm() {
           </div>
           <Field
             label="笔记内容"
-            value={form[key as keyof FormState]}
-            onChange={set(key as keyof FormState)}
+            value={form[key]}
+            onChange={set(key)}
             placeholder={placeholder}
             multiline
           />
@@ -283,7 +299,7 @@ export default function NewNoteForm() {
         <div className="save-success">
           <span className="success-mark">✓</span>
           <div>
-            <strong>已经写入 GitHub</strong>
+            <strong>{editing ? "论文记录已更新" : "已经写入 GitHub"}</strong>
             <p>{saved.path} 已提交，GitHub Actions 会自动重新构建网站。</p>
           </div>
           {saved.commitUrl && <a href={saved.commitUrl} target="_blank" rel="noreferrer">查看提交 ↗</a>}
@@ -291,12 +307,12 @@ export default function NewNoteForm() {
       )}
 
       <div className="form-actions">
-        <Link className="secondary-link" href="/#notes">取消</Link>
+        <Link className="secondary-link" href={editing && slug ? `/papers/${slug}/` : "/#notes"}>取消</Link>
         <button className="primary-button" type="submit" disabled={saving}>
-          {saving ? "正在保存…" : "保存论文记录"} <span>↗</span>
+          {saving ? (editing ? "正在更新…" : "正在保存…") : (editing ? "保存修改" : "保存论文记录")} <span>↗</span>
         </button>
       </div>
-      <p className="storage-note">保存后会在 GitHub 仓库创建一份 Markdown 笔记，并触发 GitHub Pages 自动部署。</p>
+      <p className="storage-note">{editing ? "保存后会更新 GitHub 仓库中的原始 Markdown 笔记，并触发 GitHub Pages 自动部署。" : "保存后会在 GitHub 仓库创建一份 Markdown 笔记，并触发 GitHub Pages 自动部署。"}</p>
     </form>
   );
 }
