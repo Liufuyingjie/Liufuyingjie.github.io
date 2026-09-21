@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "yingjie-research-notes-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "vars": {
+    "SITE_ORIGIN": "https://Liufuyingjie.github.io",
+    "WORKER_PUBLIC_ORIGIN": "https://YOUR-WORKER.workers.dev",
+    "ALLOWED_ORIGINS": "https://Liufuyingjie.github.io,http://localhost:3000",
+    "GITHUB_REPO_OWNER": "Liufuyingjie",
+    "GITHUB_REPO_NAME": "Liufuyingjie.github.io",
+    "ALLOWED_GITHUB_USERNAME": "Liufuyingjie"
+  },
+  "secrets": {
+    "required": [
+      "GITHUB_APP_ID",
+      "GITHUB_APP_CLIENT_ID",
+      "GITHUB_APP_CLIENT_SECRET",
+      "GITHUB_PRIVATE_KEY",
+      "SESSION_SECRET"
+    ]
+  }
+}

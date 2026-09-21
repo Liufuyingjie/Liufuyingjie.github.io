@@ -3,3 +3,8 @@ node_modules/
 out/
 .DS_Store
 *.log
+worker/node_modules/
+worker/.dev.vars
+worker/.env
+worker/.env.*
+!worker/.dev.vars.example

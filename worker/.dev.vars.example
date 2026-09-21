@@ -1,0 +1,8 @@
+# Copy this file to .dev.vars for local Worker development.
+# Do not commit .dev.vars.
+
+GITHUB_APP_ID=""
+GITHUB_APP_CLIENT_ID=""
+GITHUB_APP_CLIENT_SECRET=""
+GITHUB_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+SESSION_SECRET="replace-with-a-long-random-secret"

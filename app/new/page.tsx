@@ -21,7 +21,7 @@ export default function NewPaperPage() {
         <div>
           <p className="kicker">NEW PAPER NOTE</p>
           <h1>新增论文记录</h1>
-          <p>按照同一套结构，把你真正理解下来的内容留下来。</p>
+          <p>按照固定结构写下论文，也让每一次阅读真正沉淀到 GitHub。</p>
         </div>
         <span className="new-note-count">01 — 07</span>
       </section>

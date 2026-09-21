@@ -1,11 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { appendLocalPaper, splitParagraphs } from "../lib/local-notes";
-import type { Paper } from "../data/papers";
+import { useEffect, useMemo, useState } from "react";
+import { site } from "../data/site";
 
-const initial = {
+type FormState = {
+  title: string;
+  subtitle: string;
+  journal: string;
+  year: string;
+  authors: string;
+  affiliation: string;
+  code: string;
+  task: string;
+  model: string;
+  problem: string;
+  solution: string;
+  pipeline: string;
+  innovations: string;
+  experiments: string;
+  extensions: string;
+};
+
+const initial: FormState = {
   title: "",
   subtitle: "",
   journal: "",
@@ -22,8 +39,6 @@ const initial = {
   experiments: "",
   extensions: "",
 };
-
-type FormState = typeof initial;
 
 function Field({
   label,
@@ -42,7 +57,7 @@ function Field({
     <label className="note-field">
       <span>{label}</span>
       {multiline ? (
-        <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={7} />
+        <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={8} />
       ) : (
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
       )}
@@ -50,63 +65,171 @@ function Field({
   );
 }
 
+function normalizeApiBaseUrl(value: string) {
+  return value.replace(/\/$/, "");
+}
+
 export default function NewNoteForm() {
   const [form, setForm] = useState<FormState>(initial);
+  const [token, setToken] = useState<string | null>(null);
+  const [login, setLogin] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<{ path: string; commitUrl?: string } | null>(null);
   const [error, setError] = useState("");
+
+  const apiBaseUrl = useMemo(() => normalizeApiBaseUrl(site.apiBaseUrl), []);
+  const configured = !apiBaseUrl.includes("YOUR-WORKER.workers.dev");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const hashToken = params.get("auth");
+    const authError = params.get("auth_error");
+    if (hashToken) {
+      localStorage.setItem("yingjie-research-session", hashToken);
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    } else if (authError) {
+      const messages: Record<string, string> = {
+        not_allowed: "这个 GitHub 账号没有写入权限，请使用 Liufuyingjie 登录。",
+        invalid_state: "登录状态校验失败，请重新点击 GitHub 登录。",
+        github_error: "GitHub 授权没有完成，请重新尝试。",
+      };
+      setError(messages[authError] || "GitHub 登录失败，请重新尝试。 ");
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+
+    const existing = localStorage.getItem("yingjie-research-session");
+    if (!existing || !configured) {
+      setToken(existing);
+      setAuthLoading(false);
+      return;
+    }
+
+    setToken(existing);
+    fetch(`${apiBaseUrl}/api/me`, {
+      headers: { Authorization: `Bearer ${existing}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("session-invalid");
+        return response.json() as Promise<{ login: string }>;
+      })
+      .then((data) => setLogin(data.login))
+      .catch(() => {
+        localStorage.removeItem("yingjie-research-session");
+        setToken(null);
+        setLogin(null);
+      })
+      .finally(() => setAuthLoading(false));
+  }, [apiBaseUrl, configured]);
 
   const set = (key: keyof FormState) => (value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const startLogin = () => {
+    const returnTo = `${window.location.origin}/new/`;
+    window.location.href = `${apiBaseUrl}/auth/login?return_to=${encodeURIComponent(returnTo)}`;
+  };
+
+  const logout = () => {
+    localStorage.removeItem("yingjie-research-session");
+    setToken(null);
+    setLogin(null);
+    setSaved(null);
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    setSaved(null);
 
+    if (!token) {
+      setError("请先使用 GitHub 登录。 ");
+      return;
+    }
     if (!form.title.trim()) {
-      setError("请至少填写论文标题。");
+      setError("请至少填写论文标题。 ");
+      return;
+    }
+    if (!configured) {
+      setError("还没有配置后端地址，请先在 data/site.ts 中填写 Cloudflare Worker 地址。 ");
       return;
     }
 
-    const slug = `note-${Date.now()}`;
-    const newPaper: Paper = {
-      slug,
-      title: form.title.trim(),
-      subtitle: form.subtitle.trim(),
-      eyebrow: "Paper Note · 本地记录",
-      date: form.year.trim() || new Date().getFullYear().toString(),
-      readingStatus: "Reading note",
-      meta: [
-        ["发表期刊", form.journal],
-        ["发表年份 / 卷期", form.year],
-        ["作者", form.authors],
-        ["单位", form.affiliation],
-        ["开源代码", form.code],
-        ["核心任务", form.task],
-        ["模型名称", form.model],
-      ]
-        .filter(([, value]) => value.trim())
-        .map(([label, value]) => ({ label, value: value.trim() })),
-      sections: [
-        ["02", "论文要解决的核心问题", form.problem],
-        ["03", "核心解决方案", form.solution],
-        ["04", "训练 / 推理完整流程", form.pipeline],
-        ["05", "核心创新点", form.innovations],
-        ["06", "实验效果", form.experiments],
-        ["07", "适用场景与扩展", form.extensions],
-      ].map(([number, title, content]) => ({
-        number,
-        title,
-        content: splitParagraphs(content),
-      })),
-    };
+    setSaving(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/papers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-Research-Notes-Request": "save-paper",
+        },
+        body: JSON.stringify(form),
+      });
 
-    appendLocalPaper(newPaper);
-    window.dispatchEvent(new Event("paper-notes-updated"));
-    window.location.href = "/#notes";
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem("yingjie-research-session");
+          setToken(null);
+          setLogin(null);
+        }
+        throw new Error(data.error || "保存失败，请稍后重试。 ");
+      }
+
+      setSaved({ path: data.path, commitUrl: data.commitUrl });
+      setForm(initial);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败，请稍后重试。 ");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (authLoading) {
+    return <div className="auth-card auth-card-loading">正在确认登录状态…</div>;
+  }
+
+  if (!configured) {
+    return (
+      <div className="auth-card">
+        <span className="auth-mark">01</span>
+        <div>
+          <p className="section-label">还差一步</p>
+          <h2>先连接你的保存服务</h2>
+          <p>部署 Cloudflare Worker 后，把地址写进 <code>data/site.ts</code> 的 <code>apiBaseUrl</code>。</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!token || !login) {
+    return (
+      <div className="auth-card">
+        <span className="auth-mark">01</span>
+        <div>
+          <p className="section-label">仅作者可写</p>
+          <h2>使用 GitHub 登录后新增</h2>
+          <p>只有 GitHub 账号 <strong>Liufuyingjie</strong> 可以把论文真正写入这个网站的仓库。</p>
+          <button type="button" className="primary-button auth-button" onClick={startLogin}>
+            使用 GitHub 登录 <span>↗</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form className="new-note-form" onSubmit={handleSubmit}>
+      <div className="auth-strip">
+        <div>
+          <span className="auth-dot" />
+          已登录 {login}
+        </div>
+        <button type="button" onClick={logout}>退出</button>
+      </div>
+
       <div className="form-section">
         <div className="form-section-heading">
           <span>01</span>
@@ -132,9 +255,9 @@ export default function NewNoteForm() {
         ["02", "论文要解决的核心问题", "problem", "记录现有方法的不足、具体瓶颈，以及作者为什么要解决这个问题。"],
         ["03", "核心解决方案", "solution", "按照模块拆解整篇方法，用自己的话说明它是怎么解决问题的。"],
         ["04", "训练 / 推理完整流程", "pipeline", "从输入开始写清训练与推理的完整路径、损失函数和检索流程。"],
-        ["05", "核心创新点", "innovations", "建议按 3–5 个关键设计记录，并说明每个设计解决了什么问题。"],
+        ["05", "核心创新点", "innovations", "记录关键设计，并说明每个设计解决了什么问题。"],
         ["06", "实验效果", "experiments", "写清数据集、指标、baseline、性能变化以及消融实验。"],
-        ["07", "适用场景与扩展", "extensions", "记录适用范围、局限、可迁移设计，以及读完之后自己的疑问。"],
+        ["07", "适用场景与扩展", "extensions", "记录适用范围、局限、可迁移设计，以及读完后的疑问。"],
       ].map(([number, title, key, placeholder]) => (
         <div className="form-section" key={number}>
           <div className="form-section-heading">
@@ -151,17 +274,29 @@ export default function NewNoteForm() {
             placeholder={placeholder}
             multiline
           />
-          <p className="form-hint">段落之间空一行，网页会自动按段落排版。</p>
+          <p className="form-hint">支持 Markdown：空一行分段，使用 # / ## / - / ``` 等语法可以让阅读页面保持结构感。</p>
         </div>
       ))}
 
       {error && <p className="form-error">{error}</p>}
+      {saved && (
+        <div className="save-success">
+          <span className="success-mark">✓</span>
+          <div>
+            <strong>已经写入 GitHub</strong>
+            <p>{saved.path} 已提交，GitHub Actions 会自动重新构建网站。</p>
+          </div>
+          {saved.commitUrl && <a href={saved.commitUrl} target="_blank" rel="noreferrer">查看提交 ↗</a>}
+        </div>
+      )}
 
       <div className="form-actions">
         <Link className="secondary-link" href="/#notes">取消</Link>
-        <button className="primary-button" type="submit">保存论文记录 <span>↗</span></button>
+        <button className="primary-button" type="submit" disabled={saving}>
+          {saving ? "正在保存…" : "保存论文记录"} <span>↗</span>
+        </button>
       </div>
-      <p className="storage-note">记录会保存在当前浏览器中。GitHub Pages 本身是静态网站，不会自动把这里的内容写回 GitHub 仓库。</p>
+      <p className="storage-note">保存后会在 GitHub 仓库创建一份 Markdown 笔记，并触发 GitHub Pages 自动部署。</p>
     </form>
   );
 }

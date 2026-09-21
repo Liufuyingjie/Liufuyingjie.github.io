@@ -1,26 +1,8 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { papers as seedPapers, type Paper } from "../data/papers";
-import { readLocalPapers } from "../lib/local-notes";
+import { getAllPapers } from "../data/papers";
 
 export default function NotesSection() {
-  const [localPapers, setLocalPapers] = useState<Paper[]>([]);
-
-  useEffect(() => {
-    setLocalPapers(readLocalPapers());
-
-    const sync = () => setLocalPapers(readLocalPapers());
-    window.addEventListener("paper-notes-updated", sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener("paper-notes-updated", sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, []);
-
-  const allPapers = useMemo(() => [...localPapers, ...seedPapers], [localPapers]);
+  const allPapers = getAllPapers();
 
   return (
     <section className="notes-section shell" id="notes">
@@ -39,33 +21,27 @@ export default function NotesSection() {
       </div>
 
       <div className="paper-list">
-        {allPapers.map((paper, index) => {
-          const href = localPapers.some((item) => item.slug === paper.slug)
-            ? `/papers/local/?slug=${encodeURIComponent(paper.slug)}`
-            : `/papers/${paper.slug}/`;
-
-          return (
-            <Link
-              className="paper-card reveal"
-              style={{ animationDelay: `${index * 100 + 120}ms` }}
-              href={href}
-              key={paper.slug}
-            >
-              <span className="card-index">{String(index + 1).padStart(2, "0")}</span>
-              <div className="card-main">
-                <p className="card-eyebrow">{paper.eyebrow}</p>
-                <h3>{paper.title}</h3>
-                <p className="card-subtitle">{paper.subtitle}</p>
-                <div className="card-meta">
-                  <span>{paper.date}</span>
-                  <span>·</span>
-                  <span>阅读笔记</span>
-                </div>
+        {allPapers.map((paper, index) => (
+          <Link
+            className="paper-card reveal"
+            style={{ animationDelay: `${index * 80 + 120}ms` }}
+            href={`/papers/${paper.slug}/`}
+            key={paper.slug}
+          >
+            <span className="card-index">{String(index + 1).padStart(2, "0")}</span>
+            <div className="card-main">
+              <p className="card-eyebrow">{paper.eyebrow}</p>
+              <h3>{paper.title}</h3>
+              {paper.subtitle && <p className="card-subtitle">{paper.subtitle}</p>}
+              <div className="card-meta">
+                <span>{paper.date}</span>
+                <span>·</span>
+                <span>阅读笔记</span>
               </div>
-              <span className="card-arrow" aria-hidden="true">↗</span>
-            </Link>
-          );
-        })}
+            </div>
+            <span className="card-arrow" aria-hidden="true">↗</span>
+          </Link>
+        ))}
       </div>
     </section>
   );
