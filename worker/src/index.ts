@@ -128,10 +128,84 @@ async function verifySession(request: Request, env: Env) {
   }
 }
 
+function base64ToUint8Array(value: string) {
+  const binary = atob(value.replace(/\s/g, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function derLength(length: number) {
+  if (length < 0x80) return new Uint8Array([length]);
+  const bytes: number[] = [];
+  let value = length;
+  while (value > 0) {
+    bytes.unshift(value & 0xff);
+    value >>>= 8;
+  }
+  return new Uint8Array([0x80 | bytes.length, ...bytes]);
+}
+
+function derSequence(...parts: Uint8Array[]) {
+  const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+  const length = derLength(totalLength);
+  const output = new Uint8Array(1 + length.length + totalLength);
+  output[0] = 0x30;
+  output.set(length, 1);
+  let offset = 1 + length.length;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.length;
+  }
+  return output;
+}
+
+function derIntegerZero() {
+  return new Uint8Array([0x02, 0x01, 0x00]);
+}
+
+function derAlgorithmIdentifierRsaEncryption() {
+  return new Uint8Array([
+    0x30, 0x0d,
+    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,
+    0x05, 0x00,
+  ]);
+}
+
+function derOctetString(value: Uint8Array) {
+  const length = derLength(value.length);
+  const output = new Uint8Array(1 + length.length + value.length);
+  output[0] = 0x04;
+  output.set(length, 1);
+  output.set(value, 1 + length.length);
+  return output;
+}
+
 function pemToArrayBuffer(pem: string) {
-  const normalized = pem.replace(/\\n/g, "\n").replace(/\r/g, "");
-  const base64 = normalized.replace(/-----BEGIN PRIVATE KEY-----/g, "").replace(/-----END PRIVATE KEY-----/g, "").replace(/\s/g, "");
-  return base64UrlToBytes(base64.replace(/\+/g, "-").replace(/\//g, "_")).buffer;
+  const normalized = pem.replace(/\\n/g, "\n").replace(/\r/g, "").trim();
+  if (normalized.includes("-----BEGIN PRIVATE KEY-----")) {
+    const base64 = normalized
+      .replace("-----BEGIN PRIVATE KEY-----", "")
+      .replace("-----END PRIVATE KEY-----", "");
+    return base64ToUint8Array(base64).buffer;
+  }
+
+  if (normalized.includes("-----BEGIN RSA PRIVATE KEY-----")) {
+    // GitHub downloads GitHub App private keys as PKCS#1 RSA keys.
+    // Web Crypto imports PKCS#8, so wrap the PKCS#1 DER bytes in a PKCS#8 container.
+    const base64 = normalized
+      .replace("-----BEGIN RSA PRIVATE KEY-----", "")
+      .replace("-----END RSA PRIVATE KEY-----", "");
+    const pkcs1 = base64ToUint8Array(base64);
+    const pkcs8 = derSequence(
+      derIntegerZero(),
+      derAlgorithmIdentifierRsaEncryption(),
+      derOctetString(pkcs1),
+    );
+    return pkcs8.buffer;
+  }
+
+  throw new Error("无法识别 GitHub App 私钥格式。");
 }
 
 async function createAppJwt(env: Env) {
