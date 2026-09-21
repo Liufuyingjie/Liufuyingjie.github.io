@@ -41,14 +41,24 @@ const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function corsHeaders(request: Request, env: Env) {
   const origin = request.headers.get("Origin") || "";
-  const allowed = env.ALLOWED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
+  const normalizedOrigin = origin.trim().replace(/\/$/, "").toLowerCase();
+  const allowed = env.ALLOWED_ORIGINS
+    .split(",")
+    .map((item) => item.trim().replace(/\/$/, "").toLowerCase())
+    .filter(Boolean);
+
   const headers = new Headers({
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Research-Notes-Request",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   });
-  if (allowed.includes(origin)) headers.set("Access-Control-Allow-Origin", origin);
+
+  if (normalizedOrigin && allowed.includes(normalizedOrigin)) {
+    // Echo the browser's exact Origin value back to satisfy CORS.
+    headers.set("Access-Control-Allow-Origin", origin);
+  }
+
   return headers;
 }
 

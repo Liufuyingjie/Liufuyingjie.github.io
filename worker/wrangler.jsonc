@@ -5,9 +5,9 @@
   "compatibility_date": "2026-09-21",
   "workers_dev": true,
   "vars": {
-    "SITE_ORIGIN": "https://Liufuyingjie.github.io",
+    "SITE_ORIGIN": "https://liufuyingjie.github.io",
     "WORKER_PUBLIC_ORIGIN": "https://yingjie-research-notes-api.1335322392.workers.dev",
-    "ALLOWED_ORIGINS": "https://Liufuyingjie.github.io,http://localhost:3000",
+    "ALLOWED_ORIGINS": "https://liufuyingjie.github.io,http://localhost:3000",
     "GITHUB_REPO_OWNER": "Liufuyingjie",
     "GITHUB_REPO_NAME": "Liufuyingjie.github.io",
     "ALLOWED_GITHUB_USERNAME": "Liufuyingjie"
