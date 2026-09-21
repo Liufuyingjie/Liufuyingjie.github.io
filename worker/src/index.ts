@@ -237,6 +237,11 @@ async function githubRequest(path: string, init: RequestInit = {}, token?: strin
   return fetch(`${GH_API}${path}`, { ...init, headers });
 }
 
+async function sha256Base64Url(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return bytesToBase64Url(new Uint8Array(digest));
+}
+
 function validReturnTo(value: string | null, env: Env) {
   const siteOrigin = env.SITE_ORIGIN.replace(/\/$/, "");
   const fallback = `${siteOrigin}/new/`;
@@ -341,7 +346,8 @@ async function getInstallationToken(env: Env) {
   return token.token;
 }
 
-async function exchangeCodeForUser(code: string, env: Env) {
+async function exchangeCodeForUser(code: string, codeVerifier: string, env: Env) {
+  const redirectUri = `${env.WORKER_PUBLIC_ORIGIN.replace(/\/$/, "")}/auth/callback`;
   const response = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
@@ -349,14 +355,24 @@ async function exchangeCodeForUser(code: string, env: Env) {
       client_id: env.GITHUB_APP_CLIENT_ID,
       client_secret: env.GITHUB_APP_CLIENT_SECRET,
       code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
     }),
   });
-  if (!response.ok) throw new Error("GitHub 登录授权交换失败。");
-  const tokenData = (await response.json()) as { access_token?: string; error?: string };
-  if (!tokenData.access_token) throw new Error(tokenData.error || "未获取到 GitHub 登录令牌。");
+
+  const tokenData = (await response.json()) as {
+    access_token?: string;
+    error?: string;
+    error_description?: string;
+  };
+
+  if (!response.ok || !tokenData.access_token) {
+    const detail = tokenData.error_description || tokenData.error || "未获取到 GitHub 登录令牌。";
+    throw new Error(`GitHub 登录授权交换失败（${response.status}）：${detail}`);
+  }
 
   const userResponse = await githubRequest("/user", {}, tokenData.access_token);
-  if (!userResponse.ok) throw new Error("无法读取 GitHub 用户身份。");
+  if (!userResponse.ok) throw new Error(`无法读取 GitHub 用户身份（${userResponse.status}）。`);
   return (await userResponse.json()) as { login: string; name?: string | null };
 }
 
@@ -376,15 +392,20 @@ export default {
     }
 
     if (url.pathname === "/auth/login" && method === "GET") {
-      const stateBytes = crypto.getRandomValues(new Uint8Array(24));
-      const state = bytesToBase64Url(stateBytes);
+      const state = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)));
+      const codeVerifier = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+      const codeChallenge = await sha256Base64Url(codeVerifier);
       const returnTo = validReturnTo(url.searchParams.get("return_to"), env);
-      const cookieValue = `${state}.${stringToBase64Url(returnTo)}`;
+      const cookieValue = `${state}.${codeVerifier}.${stringToBase64Url(returnTo)}`;
+      const redirectUri = `${env.WORKER_PUBLIC_ORIGIN.replace(/\/$/, "")}/auth/callback`;
       const location = new URL("https://github.com/login/oauth/authorize");
       location.searchParams.set("client_id", env.GITHUB_APP_CLIENT_ID);
-      location.searchParams.set("redirect_uri", `${env.WORKER_PUBLIC_ORIGIN.replace(/\/$/, "")}/auth/callback`);
+      location.searchParams.set("redirect_uri", redirectUri);
       location.searchParams.set("state", state);
+      location.searchParams.set("code_challenge", codeChallenge);
+      location.searchParams.set("code_challenge_method", "S256");
       location.searchParams.set("allow_signup", "false");
+      location.searchParams.set("prompt", "select_account");
       const headers = new Headers({ Location: location.toString(), "Cache-Control": "no-store" });
       headers.set("Set-Cookie", `rn_oauth_state=${encodeURIComponent(cookieValue)}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`);
       return new Response(null, { status: 302, headers });
@@ -394,17 +415,17 @@ export default {
       const cookie = request.headers.get("Cookie") || "";
       const stateCookie = cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith("rn_oauth_state="));
       const stateValue = stateCookie ? decodeURIComponent(stateCookie.slice("rn_oauth_state=".length)) : "";
-      const [expectedState, encodedReturnTo] = stateValue.split(".");
+      const [expectedState, codeVerifier, encodedReturnTo] = stateValue.split(".");
       const givenState = url.searchParams.get("state") || "";
       const code = url.searchParams.get("code") || "";
       const returnTo = encodedReturnTo ? validReturnTo(base64UrlToString(encodedReturnTo), env) : `${env.SITE_ORIGIN.replace(/\/$/, "")}/new/`;
 
-      if (!expectedState || !givenState || expectedState !== givenState || !code) {
+      if (!expectedState || !codeVerifier || !givenState || expectedState !== givenState || !code) {
         return redirect(`${returnTo}#auth_error=invalid_state`);
       }
 
       try {
-        const user = await exchangeCodeForUser(code, env);
+        const user = await exchangeCodeForUser(code, codeVerifier, env);
         if (user.login !== env.ALLOWED_GITHUB_USERNAME) {
           return redirect(`${returnTo}#auth_error=not_allowed`);
         }
@@ -493,6 +514,95 @@ export default {
         }, 201);
       } catch (error) {
         return json(request, env, { error: error instanceof Error ? error.message : "保存论文时发生未知错误。" }, 502);
+      }
+    }
+
+    const editMatch = url.pathname.match(/^\/api\/papers\/([a-z0-9-]+)$/i);
+    if (editMatch && method === "PUT") {
+      const session = await verifySession(request, env);
+      if (!session) return unauthorized(request, env);
+
+      if (request.headers.get("X-Research-Notes-Request") !== "edit-paper") {
+        return json(request, env, { error: "缺少请求校验头。" }, 403);
+      }
+
+      const slug = editMatch[1];
+      let input: PaperInput;
+      try {
+        input = await request.json() as PaperInput;
+      } catch {
+        return json(request, env, { error: "提交的数据不是有效 JSON。" }, 400);
+      }
+
+      if (!input || typeof input.title !== "string" || !input.title.trim()) {
+        return json(request, env, { error: "论文标题不能为空。" }, 400);
+      }
+
+      const normalized: PaperInput = {
+        title: String(input.title || "").trim(),
+        subtitle: String(input.subtitle || "").trim(),
+        journal: String(input.journal || "").trim(),
+        year: String(input.year || "").trim(),
+        authors: String(input.authors || "").trim(),
+        affiliation: String(input.affiliation || "").trim(),
+        code: String(input.code || "").trim(),
+        task: String(input.task || "").trim(),
+        model: String(input.model || "").trim(),
+        problem: String(input.problem || "").trim(),
+        solution: String(input.solution || "").trim(),
+        pipeline: String(input.pipeline || "").trim(),
+        innovations: String(input.innovations || "").trim(),
+        experiments: String(input.experiments || "").trim(),
+        extensions: String(input.extensions || "").trim(),
+      };
+
+      if (normalized.title.length > 300) return json(request, env, { error: "论文标题过长。" }, 400);
+
+      const path = `content/papers/${slug}.md`;
+      try {
+        const token = await getInstallationToken(env);
+        const existingResponse = await githubRequest(
+          `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+          { method: "GET" },
+          token,
+        );
+
+        if (!existingResponse.ok) {
+          if (existingResponse.status === 404) return json(request, env, { error: "找不到这篇论文笔记。" }, 404);
+          return json(request, env, { error: `读取原论文失败（${existingResponse.status}）。` }, 502);
+        }
+
+        const existing = await existingResponse.json() as { sha?: string };
+        if (!existing.sha) return json(request, env, { error: "无法获取原论文的 GitHub 文件标识。" }, 502);
+
+        const content = buildMarkdown(normalized, slug);
+        const response = await githubRequest(
+          `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({
+              message: `Update paper note: ${normalized.title}`,
+              content: encodeRepoContent(content),
+              sha: existing.sha,
+              branch: "main",
+            }),
+          },
+          token,
+        );
+
+        const result = await response.json().catch(() => ({})) as { content?: { path?: string }; commit?: { html_url?: string } };
+        if (!response.ok) {
+          return json(request, env, { error: `更新 GitHub 论文失败（${response.status}）。` }, 502);
+        }
+
+        return json(request, env, {
+          ok: true,
+          slug,
+          path: result.content?.path || path,
+          commitUrl: result.commit?.html_url,
+        });
+      } catch (error) {
+        return json(request, env, { error: error instanceof Error ? error.message : "更新论文时发生未知错误。" }, 502);
       }
     }
 

@@ -126,6 +126,7 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
         localStorage.removeItem("yingjie-research-session");
         setToken(null);
         setLogin(null);
+        setError("登录状态验证失败，请重新使用 GitHub 登录。 ");
       })
       .finally(() => setAuthLoading(false));
   }, [apiBaseUrl, configured]);
@@ -247,6 +248,7 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
             <span>{loginRedirecting ? "正在前往 GitHub…" : "使用 GitHub 登录"}</span>
             <span className="github-login-arrow" aria-hidden="true">↗</span>
           </button>
+          {error && <p className="form-error auth-card-error">{error}</p>}
           <p className="auth-note">GitHub 仅用于验证你的身份，不会把账号密码提供给本站。</p>
         </div>
       </div>
