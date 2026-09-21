@@ -19,7 +19,7 @@ export default function NewPaperPage() {
 
       <section className="new-note-hero shell">
         <div>
-          <p className="kicker">NEW PAPER NOTE</p>
+          <p className="kicker">论文记录</p>
           <h1>新增论文记录</h1>
           <p>按照固定结构写下论文，也让每一次阅读真正沉淀到 GitHub。</p>
         </div>

@@ -40,3 +40,9 @@ git push
 ## 安全
 
 编辑接口使用与你新增接口相同的登录会话，并在 Worker 端再次检查账号身份。浏览器拿不到 GitHub App Private Key 或 GitHub App Client Secret。
+
+
+## v4.1 visual update
+- Redesigned the paper-page edit action with a quieter Apple-like control.
+- Reworked the GitHub authentication panel with no numeric marker, a GitHub mark, clearer Chinese copy, and refined hierarchy.
+- Reduced unnecessary English labels on create/edit pages.

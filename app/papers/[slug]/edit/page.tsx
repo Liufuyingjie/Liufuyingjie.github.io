@@ -53,7 +53,7 @@ export default async function EditPaperPage({ params }: { params: Promise<{ slug
       </nav>
 
       <header className="new-page-header shell reveal">
-        <p className="kicker">EDIT PAPER</p>
+        <p className="kicker">编辑笔记</p>
         <h1>修改论文记录</h1>
         <p>保持同样的阅读结构，只修改你真正想留下来的内容。</p>
       </header>

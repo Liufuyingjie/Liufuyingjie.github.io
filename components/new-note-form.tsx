@@ -208,10 +208,15 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
   if (!configured) {
     return (
       <div className="auth-card">
-        <span className="auth-mark">01</span>
-        <div>
-          <p className="section-label">还差一步</p>
-          <h2>先连接你的保存服务</h2>
+        <div className="auth-card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3.75 19 6.5v5.3c0 4.1-2.42 7.05-7 8.45-4.58-1.4-7-4.35-7-8.45V6.5l7-2.75Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+            <path d="m9.1 12.1 1.9 1.9 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div className="auth-card-copy">
+          <p className="section-label">保存服务</p>
+          <h2>还需要连接保存服务</h2>
           <p>部署 Cloudflare Worker 后，把地址写进 <code>data/site.ts</code> 的 <code>apiBaseUrl</code>。</p>
         </div>
       </div>
@@ -220,15 +225,26 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
 
   if (!token || !login) {
     return (
-      <div className="auth-card">
-        <span className="auth-mark">01</span>
-        <div>
+      <div className="auth-card auth-card-login">
+        <div className="auth-card-icon github-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.09.67-3.74-1.3-3.74-1.3-.51-1.29-1.24-1.64-1.24-1.64-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1 1.56-.76 1.94-1.18-.99-.1-2.04-.5-2.04-2.23 0-.5.18-.92.47-1.25-.05-.12-.2-.6.05-1.24 0 0 .93-.3 3.05 1.2.89-.25 1.84-.38 2.79-.38.95 0 1.9.13 2.79.38 2.12-1.5 3.05-1.2 3.05-1.2.25.64.1 1.12.05 1.24.29.33.47.75.47 1.25 0 1.73-1.05 2.12-2.05 2.23.38.42.72 1.25.72 2.53v2.3c0 .31.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/>
+          </svg>
+        </div>
+        <div className="auth-card-copy">
           <p className="section-label">仅作者可写</p>
-          <h2>{editing ? "使用 GitHub 登录后编辑" : "使用 GitHub 登录后新增"}</h2>
-          <p>只有 GitHub 账号 <strong>Liufuyingjie</strong> 可以修改这个网站的论文记录。</p>
-          <button type="button" className="primary-button auth-button" onClick={startLogin}>
-            使用 GitHub 登录 <span>↗</span>
+          <h2>{editing ? "编辑这篇论文笔记" : "新增一篇论文笔记"}</h2>
+          <p>通过 GitHub 验证身份。只有 <strong>@Liufuyingjie</strong> 可以保存或修改本站的论文记录。</p>
+          <button type="button" className="github-login-button" onClick={startLogin}>
+            <span className="github-login-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.09.67-3.74-1.3-3.74-1.3-.51-1.29-1.24-1.64-1.24-1.64-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1 1.56-.76 1.94-1.18-.99-.1-2.04-.5-2.04-2.23 0-.5.18-.92.47-1.25-.05-.12-.2-.6.05-1.24 0 0 .93-.3 3.05 1.2.89-.25 1.84-.38 2.79-.38.95 0 1.9.13 2.79.38 2.12-1.5 3.05-1.2 3.05-1.2.25.64.1 1.12.05 1.24.29.33.47.75.47 1.25 0 1.73-1.05 2.12-2.05 2.23.38.42.72 1.25.72 2.53v2.3c0 .31.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/>
+              </svg>
+            </span>
+            <span>使用 GitHub 登录</span>
+            <span className="github-login-arrow" aria-hidden="true">↗</span>
           </button>
+          <p className="auth-note">GitHub 仅用于验证你的身份，不会把账号密码提供给本站。</p>
         </div>
       </div>
     );
@@ -279,7 +295,7 @@ export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPap
           <div className="form-section-heading">
             <span>{number}</span>
             <div>
-              <p className="section-label">RESEARCH NOTE</p>
+              <p className="section-label">阅读笔记</p>
               <h2>{title}</h2>
             </div>
           </div>
