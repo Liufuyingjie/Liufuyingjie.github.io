@@ -1,7 +1,7 @@
 ---
 slug: "efficient-fine-grained-image-retrieval-with-vision-foundation-models-for-1789982572950-nm5wcq"
 title: "Efficient Fine-grained Image Retrieval with Vision Foundation Models for  Industrial Objects"
-subtitle: "使用工业对象视觉基础模型进行高效细粒度图像检索"
+subtitle: "基于视觉基础模型的工业物体高效细粒度图像检索"
 eyebrow: "Paper Note · 2026"
 date: "2026"
 year: "2026"
@@ -17,7 +17,7 @@ readingStatus: "阅读笔记"
 ## 01 论文基础信息
 
 - **论文标题：** Efficient Fine-grained Image Retrieval with Vision Foundation Models for  Industrial Objects
-- **中文标题：** 使用工业对象视觉基础模型进行高效细粒度图像检索
+- **中文标题：** 基于视觉基础模型的工业物体高效细粒度图像检索
 - **发表期刊：** CVPR
 - **发表年份 / 卷期：** 2026
 - **作者：** Yushi Liu, Christian Graf, Markus Spies, Margret Keuper
@@ -28,31 +28,31 @@ readingStatus: "阅读笔记"
 
 ## 02 论文要解决的核心问题
 
-### 在工业备件这种细粒度实例检索任务中，视觉基础模型的全局特征和局部 patch 特征分别有多大价值？
-### 如何用轻量适配方式，把冻结的基础模型高效地用于工业检索？
+#### 在工业备件这种细粒度实例检索任务中，视觉基础模型的全局特征和局部 patch 特征分别有多大价值？
+#### 如何用轻量适配方式，把冻结的基础模型高效地用于工业检索？
 
-### 其中论文希望解决三个问题：
+#### 其中论文希望解决三个问题：
 - 构建一个大规模、多视角、多背景的工业备件实例级检索基准；
 - 系统比较三种视觉基础模型——DINOv2、DINOv3、SigLIP2——在工业细粒度检索中的表现；
 - 分析 Vision Transformer 中 CLS token 和 patch token 的作用，并研究不同池化策略对检索性能的影响。
 
 ## 03 核心解决方案
 
-### 冻结视觉基础模型作为编码器，输出 CLS 和 patch。只训练线性池化层和线性投影头；
-### 论文采用加权平均池化WP，用一个共享线性层给每个patch打分，再通过softmax归一化得到每个patch的权重，最后加权求和，这种注意力式加权可以使模型更加关注相关其余，抑制噪声背景，并且不需要分割预处理。最后将CLS和加权patch拼接，最终嵌入维度为2048；
+#### 冻结视觉基础模型作为编码器，输出 CLS 和 patch。只训练线性池化层和线性投影头；
+#### 论文采用加权平均池化WP，用一个共享线性层给每个patch打分，再通过softmax归一化得到每个patch的权重，最后加权求和，这种注意力式加权可以使模型更加关注相关其余，抑制噪声背景，并且不需要分割预处理。最后将CLS和加权patch拼接，最终嵌入维度为2048；
 
 ## 04 训练 / 推理完整流程
 
-### 训练阶段：
-构造正负图像对；
-冻结 DINOv3 编码器，提取每张图的 CLS 和 patch tokens；
-线性池化层给 patch 打分，softmax 归一化，加权平均得到 T_p；
-拼接 CLS 和 T_p ，经线性投影头得到最终嵌入；
-两个嵌入算余弦相似度；
-经可训练 logistic 函数得到匹配分数；
-二分类交叉熵损失，只更新线性池化层和投影头。
-
-### 推理/检索阶段：
+#### 训练阶段：
+- 构造正负图像对；
+- 冻结 DINOv3 编码器，提取每张图的 CLS 和 patch tokens；
+- 线性池化层给 patch 打分，softmax 归一化，加权平均得到 T_p；
+- 拼接 CLS 和 T_p ，经线性投影头得到最终嵌入；
+- 两个嵌入算余弦相似度；
+- 经可训练 logistic 函数得到匹配分数；（logistic函数的作用是吧余弦相似度校准成概率值，用于最终判断）
+- 二分类交叉熵损失，反向传播只更新线性池化层和投影头以及logistic的参数。这个时候如果样本对是负相关的，理想情况下余弦相似度会比较低，经过logistic函数计算出来的值表示同一对象概率低，经过反向传播让正样本对相似度高，负样本对相似度更低
+- 训练时是二分类任务
+#### 推理/检索阶段：
 gallery 图像过冻结编码器 + 训练好的适配模块，特征入库；
 query 图像过同样流程；
 query 与 gallery 算余弦相似度，经 logistic 归一化；
@@ -61,7 +61,7 @@ query 与 gallery 算余弦相似度，经 logistic 归一化；
 
 ## 05 核心创新点
 
-
+#### 用了加权平均池化WP聚合patch，融合CLS和patch
 
 ## 06 实验效果
 
@@ -86,4 +86,4 @@ DINOv3 [CLS+P] + SigLIP2 + WP	97.56 ± 0.61%
 
 ## 07 适用场景与扩展
 
-
+- 该论文可作为入门第一篇，研究DINOv3模型的特征性能，探究不同feature在冻结dinov3下的性能。作为baseline实验
