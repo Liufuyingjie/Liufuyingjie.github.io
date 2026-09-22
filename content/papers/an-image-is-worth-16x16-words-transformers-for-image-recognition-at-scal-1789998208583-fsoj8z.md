@@ -1,6 +1,6 @@
 ---
 slug: "an-image-is-worth-16x16-words-transformers-for-image-recognition-at-scal-1789998208583-fsoj8z"
-title: "An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale》（ViT）"
+title: "An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale（ViT）"
 subtitle: "一张图等于16x16个词：大规模图像识别的Transformer"
 eyebrow: "Paper Note · 2020"
 date: "2020"
@@ -16,7 +16,7 @@ readingStatus: "阅读笔记"
 
 ## 01 论文基础信息
 
-- **论文标题：** An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale》（ViT）
+- **论文标题：** An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale（ViT）
 - **中文标题：** 一张图等于16x16个词：大规模图像识别的Transformer
 - **发表年份 / 卷期：** 2020
 - **核心任务：** 图像检索，Transformer
@@ -33,20 +33,67 @@ CNN天生具有归纳偏置，如平移等变性和局部性，这使得它们�
 
 ## 04 训练 / 推理完整流程
 
-图像分块（Patchify）：
-将一张输入图像（如 224×224 像素）分割成一个个固定大小的、互不重叠的图像块（Patches）。论文中常见的块大小有 16×16 或 32×32。
+#### 输入：原始图片，举例 224×224×3（RGB 三通道）
 
-线性投影（Linear Projection）：
-将每个展平后的图像块向量，通过一个可训练的线性层（全连接层）映射到一个固定维度 D 的空间，得到块嵌入（Patch Embeddings）。这个操作类似于NLP中的词嵌入（Word Embedding）。
+1. **切 patch**
+把整张图切成不重叠的小方块，经典 ViT 用 patch 大小 16×16。
+224 ÷16 =14，所以横向 14 块、纵向 14 块，一共 14×14=196 个 patch。
+每个 patch：16×16×3，展平成一维向量，长度 = 16×16×3=768。
+👉 得到：**196 个 patch token**，每个 token 是 768 维向量。
+2. **加上可学习的位置编码**
+图片是二维的，Transformer 本身不知道位置。给每个 patch token 加上一个 768 维的位置向量，告诉网络这个 patch 在图里的坐标。
+3. **拼接 CLS token（关键一步）**
+额外造一个**单独、可学习的 768 维向量，就是 CLS token**，放在序列最前面。
+现在 token 序列变成：`[CLS(768), patch1(768), patch2(768), …, patch196(768)]`
+总长度：197 个 token，每个 768 维。
 
-添加位置编码（Position Embedding）：
-由于Transformer本身是置换不变的，即不关心输入序列的顺序，所以需要加入位置信息。ViT使用了标准的可学习1D位置编码，将其添加到每个块嵌入上，以保留图像块在原始图像中的空间位置。
+> 这一整串，就是**送入 Transformer Block 的输入**。
 
-分类令牌（Class Token）：
-模仿BERT模型，ViT在输入序列的最前面添加了一个特殊的可学习嵌入向量，称为 [class] token。这个令牌在Transformer编码器的最深层对应的输出状态，被用作整个图像的最终表示，并送入一个分类头（MLP）进行类别预测。这种做法替代了CNN中常用的全局平均池化。
+#### 进入 Transformer Block（ViT 由很多个相同 Block 堆叠而成，比如 12 层）
 
-Transformer编码器（Transformer Encoder）：
-将上述带有位置编码的序列（包含 [class] token 和所有图像块嵌入）输入到一个标准的Transformer编码器中。该编码器由多个相同的层堆叠而成，每层包含多头自注意力（Multi-head Self-Attention, MSA） 和MLP前馈网络，并在每个模块前使用层归一化（Layer Norm），每个模块后使用残差连接（Residual Connection）。
+一个 Block 内部顺序：
+`多头自注意力(MHA) → 残差相加 → LayerNorm → FFN前馈网络 → 残差相加`
+
+##### ① 多头自注意力（MHA，就是刚才讲的 head）
+
+输入：197 个 token，每个 768 维
+
+1. 全部 token 一起乘线性层，得到 Q、K、V，每个 token 各一套 768 维的 Q/K/V
+2. **切分多头**：假设 8 个 head，把 768 维平均切 8 份，每份 96 维
+   - head0：拿所有 token 的 Q0,K0,V0（96 维）单独算注意力
+   - head1：拿 Q1,K1,V1（另一组 96 维）单独算注意力
+   - … 一直到 head7
+   ✅ 每个 head 独立看这 197 个 token 之间的相互关系，互不干扰
+3. 每个 head 输出一组 197 个、96 维的 token 序列
+4. 把 8 个 head 同位置的 token 拼接：96×8=768 维，变回原来维度
+输出：**197 个 768 维 token**，序列长度不变，还是`[CLS, patch1…patch196]`
+
+> 重点：CLS token 和所有 patch token 一起参与注意力计算！
+> CLS 会和 196 个 patch 互相做注意力，吸收整张图片所有 patch 的信息。
+
+##### ② 残差连接 + LayerNorm
+
+把多头注意力输出，加上**最开始进入这个 block 的原始输入**（残差），再做归一化。
+
+### ③ FFN（前馈网络）
+
+每个 token 单独过两层 MLP，每个 token 独立计算，token 之间不再交互。
+FFN 结束后，再做一次残差相加。
+
+✅ 这就是**1 个 Transformer Block**。
+ViT 会堆叠很多个 Block（ViT-B 是 12 层），**上一个 Block 输出的 197 个 token，直接作为下一个 Block 的输入**。
+每一层，CLS 都会不断和 patch 交换信息，不断学习全局图像特征。
+
+---
+
+#### 全部 Transformer 层跑完之后（最后一层输出）
+
+依然是 197 个 token：`[CLS_out, patch1_out, patch2_out,...,patch196_out]`
+
+- 分类任务：**只拿第一个 CLS_out 这个 768 维向量**，送入最后的分类头，预测图片类别。CLS 已经融合了整张图信息。
+- 图像检索（DINOv3）：两种选择
+  1. 直接拿 CLS 向量，作为整图全局描述子（你现在 baseline 用的）
+  2. 舍弃 CLS，把后面 196 个 patch token 做均值池化，得到全局向量，细粒度检索有时效果更好
 
 输入图像 X
   ↓
