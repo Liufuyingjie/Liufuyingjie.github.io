@@ -1,34 +1,7 @@
-import Link from "next/link";
-import ThemeToggle from "../../components/theme-toggle";
+import type { Metadata } from "next";
+import SiteNav from "../../components/site-nav";
+import Masthead from "../../components/masthead";
+import SiteFooter from "../../components/site-footer";
 import NewNoteForm from "../../components/new-note-form";
-import { site } from "../../data/site";
-
-export default function NewPaperPage() {
-  return (
-    <main>
-      <nav className="site-nav">
-        <a className="brand" href={site.githubUrl} target="_blank" rel="noreferrer" aria-label="Open YingJie GitHub">
-          <span>{site.name}</span>
-          <span className="brand-arrow" aria-hidden="true">↗</span>
-        </a>
-        <div className="nav-links">
-          <Link href="/#notes">论文记录</Link>
-          <ThemeToggle />
-        </div>
-      </nav>
-
-      <section className="new-note-hero shell">
-        <div>
-          <p className="kicker">论文记录</p>
-          <h1>新增论文记录</h1>
-          <p>按照固定结构写下论文，也让每一次阅读真正沉淀到 GitHub。</p>
-        </div>
-        <span className="new-note-count">01 — 07</span>
-      </section>
-
-      <div className="shell new-note-shell">
-        <NewNoteForm />
-      </div>
-    </main>
-  );
-}
+export const metadata: Metadata = { title: "写笔记" };
+export default function NewPaperPage() { return <><SiteNav overlay/><Masthead title="把理解，写下来" subtitle="一篇论文，一个问题，或一个还在生长的想法。"/><main className="writer-shell shell" id="main-content"><NewNoteForm/></main><SiteFooter/></>; }

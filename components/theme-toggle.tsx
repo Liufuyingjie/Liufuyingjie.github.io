@@ -1,36 +1,14 @@
 "use client";
-
 import { useEffect, useState } from "react";
-
+import Icon from "./icons";
 export default function ThemeToggle() {
   const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("paper-notes-theme");
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextDark = saved ? saved === "dark" : systemDark;
-    document.documentElement.dataset.theme = nextDark ? "dark" : "light";
-    setDark(nextDark);
-  }, []);
-
+  useEffect(() => { setDark(document.documentElement.dataset.theme === "dark"); }, []);
   function toggle() {
-    const nextDark = !dark;
-    setDark(nextDark);
-    document.documentElement.dataset.theme = nextDark ? "dark" : "light";
-    localStorage.setItem("paper-notes-theme", nextDark ? "dark" : "light");
+    const value = !dark;
+    document.documentElement.dataset.theme = value ? "dark" : "light";
+    setDark(value);
+    try { localStorage.setItem("paper-notes-theme", value ? "dark" : "light"); } catch {}
   }
-
-  return (
-    <button
-      className="theme-toggle"
-      type="button"
-      onClick={toggle}
-      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      <span className="theme-icon" aria-hidden="true">
-        {dark ? "☼" : "◐"}
-      </span>
-      <span>{dark ? "Light" : "Dark"}</span>
-    </button>
-  );
+  return <button className="theme-toggle icon-button" type="button" onClick={toggle} aria-label={dark ? "切换浅色模式" : "切换深色模式"} title={dark ? "切换浅色" : "切换深色"}><Icon name={dark ? "sun" : "moon"}/></button>;
 }

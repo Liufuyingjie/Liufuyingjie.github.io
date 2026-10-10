@@ -6,21 +6,33 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run test && tsc --noEmit",
+    "postbuild": "tsx scripts/generate-feeds.ts",
+    "test:ui": "playwright test"
   },
   "dependencies": {
-    "next": "16.3.5",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "gray-matter": "^4.0.3",
-    "marked": "^16.3.0"
+    "dompurify": "^3.4.16",
+    "marked": "^16.3.0",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "sanitize-html": "^2.17.5",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/node": "22.15.30",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
-    "eslint": "9.25.1",
-    "eslint-config-next": "16.3.5",
+    "@types/sanitize-html": "^2.16.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.0",
+    "tsx": "^4.23.15",
     "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

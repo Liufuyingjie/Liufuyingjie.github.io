@@ -1,3 +1,6 @@
+import { parse } from "yaml";
+import { buildNoteMarkdown, normalizeNoteInput, splitFrontMatter, type NoteInput } from "../../shared/note-format";
+
 interface Env {
   SITE_ORIGIN: string;
   WORKER_PUBLIC_ORIGIN: string;
@@ -12,23 +15,7 @@ interface Env {
   SESSION_SECRET: string;
 }
 
-type PaperInput = {
-  title: string;
-  subtitle: string;
-  journal: string;
-  year: string;
-  authors: string;
-  affiliation: string;
-  code: string;
-  task: string;
-  model: string;
-  problem: string;
-  solution: string;
-  pipeline: string;
-  innovations: string;
-  experiments: string;
-  extensions: string;
-};
+type PaperInput = NoteInput & { expectedSha?: string };
 
 type SessionPayload = {
   login: string;
@@ -65,6 +52,7 @@ function corsHeaders(request: Request, env: Env) {
 function json(request: Request, env: Env, body: unknown, status = 200) {
   const headers = corsHeaders(request, env);
   headers.set("Content-Type", "application/json; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
   return new Response(JSON.stringify(body), { status, headers });
 }
 
@@ -120,15 +108,14 @@ async function createSession(login: string, secret: string) {
 }
 
 async function verifySession(request: Request, env: Env) {
-  const auth = request.headers.get("Authorization") || "";
-  if (!auth.startsWith("Bearer ")) return null;
-
-  const token = auth.slice("Bearer ".length).trim();
-  const [body, signature] = token.split(".");
-  if (!body || !signature) return null;
-  if (!(await hmacVerify(body, signature, env.SESSION_SECRET))) return null;
-
   try {
+    const auth = request.headers.get("Authorization") || "";
+    if (!auth.startsWith("Bearer ")) return null;
+    const parts = auth.slice(7).trim().split(".");
+    if (parts.length !== 2) return null;
+    const [body, signature] = parts;
+    if (!body || !signature || body.length > 4096 || signature.length > 1024) return null;
+    if (!(await hmacVerify(body, signature, env.SESSION_SECRET))) return null;
     const payload = JSON.parse(base64UrlToString(body)) as SessionPayload;
     if (payload.login !== env.ALLOWED_GITHUB_USERNAME) return null;
     if (!Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
@@ -289,35 +276,12 @@ function makeSlug(title: string) {
   return `${normalized || "paper"}-${Date.now()}-${suffix}`;
 }
 
-function yaml(value: string) {
-  return JSON.stringify(value ?? "");
+function buildMarkdown(input: PaperInput, slug: string, existing?: Record<string, unknown>) {
+  return buildNoteMarkdown(input, slug, existing);
 }
 
-function buildMarkdown(input: PaperInput, slug: string) {
-  const now = new Date();
-  const date = (input.year.trim() || String(now.getFullYear())).split(" · ")[0];
-  const sections: Array<[string, string, string]> = [
-    ["02", "论文要解决的核心问题", input.problem],
-    ["03", "核心解决方案", input.solution],
-    ["04", "训练 / 推理完整流程", input.pipeline],
-    ["05", "核心创新点", input.innovations],
-    ["06", "实验效果", input.experiments],
-    ["07", "适用场景与扩展", input.extensions],
-  ];
-
-  const basics = [
-    ["论文标题", input.title],
-    ["中文标题", input.subtitle],
-    ["发表期刊", input.journal],
-    ["发表年份 / 卷期", input.year],
-    ["作者", input.authors],
-    ["单位", input.affiliation],
-    ["开源代码", input.code],
-    ["核心任务", input.task],
-    ["模型名称", input.model],
-  ].filter(([, value]) => value.trim());
-
-  return `---\nslug: ${yaml(slug)}\ntitle: ${yaml(input.title.trim())}\nsubtitle: ${yaml(input.subtitle.trim())}\neyebrow: ${yaml(`Paper Note · ${date}`)}\ndate: ${yaml(date)}\nyear: ${yaml(input.year.trim())}\njournal: ${yaml(input.journal.trim())}\nauthors: ${yaml(input.authors.trim())}\naffiliation: ${yaml(input.affiliation.trim())}\ncode: ${yaml(input.code.trim())}\ntask: ${yaml(input.task.trim())}\nmodel: ${yaml(input.model.trim())}\nreadingStatus: ${yaml("阅读笔记")}\n---\n\n## 01 论文基础信息\n\n${basics.map(([label, value]) => `- **${label}：** ${value}`).join("\n")}\n\n${sections.map(([number, title, value]) => `## ${number} ${title}\n\n${value.trim()}`).join("\n\n")}\n`;
+function decodeRepoContent(value: string) {
+  return new TextDecoder().decode(base64ToUint8Array(value));
 }
 
 function encodeRepoContent(content: string) {
@@ -398,7 +362,7 @@ export default {
     }
 
     if (url.pathname === "/health" && method === "GET") {
-      return json(request, env, { ok: true, service: "yingjie-research-notes-api" });
+      return json(request, env, { ok: true, service: "yingjie-research-notes-api", schemaVersion: 5, capabilities: ["markdown-body", "journal", "metadata", "optimistic-edit"] });
     }
 
     if (url.pathname === "/auth/login" && method === "GET") {
@@ -473,23 +437,8 @@ export default {
         return json(request, env, { error: "论文标题不能为空。" }, 400);
       }
 
-      const normalized: PaperInput = {
-        title: String(input.title || "").trim(),
-        subtitle: String(input.subtitle || "").trim(),
-        journal: String(input.journal || "").trim(),
-        year: String(input.year || "").trim(),
-        authors: String(input.authors || "").trim(),
-        affiliation: String(input.affiliation || "").trim(),
-        code: String(input.code || "").trim(),
-        task: String(input.task || "").trim(),
-        model: String(input.model || "").trim(),
-        problem: String(input.problem || "").trim(),
-        solution: String(input.solution || "").trim(),
-        pipeline: String(input.pipeline || "").trim(),
-        innovations: String(input.innovations || "").trim(),
-        experiments: String(input.experiments || "").trim(),
-        extensions: String(input.extensions || "").trim(),
-      };
+      const normalized: PaperInput = normalizeNoteInput(input as unknown as Record<string, unknown>);
+      if (normalized.body.length > 500_000) return json(request, env, { error: "正文过长，请分成多篇笔记。" }, 400);
 
       if (normalized.title.length > 300) return json(request, env, { error: "论文标题过长。" }, 400);
       const slug = makeSlug(normalized.title);
@@ -548,23 +497,8 @@ export default {
         return json(request, env, { error: "论文标题不能为空。" }, 400);
       }
 
-      const normalized: PaperInput = {
-        title: String(input.title || "").trim(),
-        subtitle: String(input.subtitle || "").trim(),
-        journal: String(input.journal || "").trim(),
-        year: String(input.year || "").trim(),
-        authors: String(input.authors || "").trim(),
-        affiliation: String(input.affiliation || "").trim(),
-        code: String(input.code || "").trim(),
-        task: String(input.task || "").trim(),
-        model: String(input.model || "").trim(),
-        problem: String(input.problem || "").trim(),
-        solution: String(input.solution || "").trim(),
-        pipeline: String(input.pipeline || "").trim(),
-        innovations: String(input.innovations || "").trim(),
-        experiments: String(input.experiments || "").trim(),
-        extensions: String(input.extensions || "").trim(),
-      };
+      const normalized: PaperInput = normalizeNoteInput(input as unknown as Record<string, unknown>);
+      if (normalized.body.length > 500_000) return json(request, env, { error: "正文过长，请分成多篇笔记。" }, 400);
 
       if (normalized.title.length > 300) return json(request, env, { error: "论文标题过长。" }, 400);
 
@@ -582,10 +516,19 @@ export default {
           return json(request, env, { error: `读取原论文失败（${existingResponse.status}）。` }, 502);
         }
 
-        const existing = await existingResponse.json() as { sha?: string };
+        const existing = await existingResponse.json() as { sha?: string; content?: string };
         if (!existing.sha) return json(request, env, { error: "无法获取原论文的 GitHub 文件标识。" }, 502);
 
-        const content = buildMarkdown(normalized, slug);
+        if (typeof input.expectedSha === "string" && input.expectedSha !== existing.sha) {
+          return json(request, env, { error: "远端记录已有更新。请先导出本机草稿，再刷新编辑页并核对内容；本次没有覆盖原记录。" }, 409);
+        }
+        if (!existing.content) return json(request, env, { error: "原笔记正文无法读取，为避免丢失内容，已取消更新。" }, 502);
+        const original = splitFrontMatter(decodeRepoContent(existing.content));
+        const originalMetadata = (original.header ? parse(original.header) : {}) as Record<string, unknown>;
+        if (!originalMetadata || typeof originalMetadata !== "object" || Array.isArray(originalMetadata)) {
+          return json(request, env, { error: "原笔记元数据格式异常，已取消更新。" }, 400);
+        }
+        const content = buildMarkdown(normalized, slug, originalMetadata);
         const response = await githubRequest(
           `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
           {
@@ -602,6 +545,7 @@ export default {
 
         const result = await response.json().catch(() => ({})) as { content?: { path?: string }; commit?: { html_url?: string } };
         if (!response.ok) {
+          if (response.status === 409) return json(request, env, { error: "笔记在保存时被更新了。本机草稿已保留，请刷新后合并修改。" }, 409);
           return json(request, env, { error: `更新 GitHub 论文失败（${response.status}）。` }, 502);
         }
 

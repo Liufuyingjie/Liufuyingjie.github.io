@@ -1,0 +1,18 @@
+import fs from "node:fs";
+import path from "node:path";
+import { getAllPapers } from "../lib/papers";
+import { site } from "../data/site";
+const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c]!));
+const base = site.homepageUrl.replace(/\/$/, "");
+const papers = getAllPapers();
+const items = papers.map(p => `<item><title>${escape(p.title)}</title><link>${base}/papers/${p.slug}/</link><guid isPermaLink="true">${base}/papers/${p.slug}/</guid><description>${escape(p.summary)}</description>${p.createdAt ? `<pubDate>${new Date(p.createdAt).toUTCString()}</pubDate>` : ""}${p.tags.map(t => `<category>${escape(t)}</category>`).join("")}</item>`).join("\n");
+const feed = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>${escape(site.name)} · Research Notes</title><link>${base}/</link><description>${escape(site.description)}</description><language>zh-CN</language><atom:link href="${base}/feed.xml" rel="self" type="application/rss+xml"/>${items}</channel></rss>\n`;
+const pages = ["/", "/archives/", "/tags/", "/about/", ...papers.map(p => `/papers/${p.slug}/`)];
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${pages.map(page => `<url><loc>${base}${page}</loc></url>`).join("")}</urlset>\n`;
+const out = path.join(process.cwd(), "out");
+fs.mkdirSync(out, { recursive: true });
+fs.writeFileSync(path.join(out, "feed.xml"), feed);
+fs.writeFileSync(path.join(out, "sitemap.xml"), sitemap);
+fs.writeFileSync(path.join(out, "robots.txt"), `User-agent: *\nAllow: /\nDisallow: /new/\nDisallow: /papers/*/edit/\nSitemap: ${base}/sitemap.xml\n`);
+fs.writeFileSync(path.join(out, ".nojekyll"), "");
+console.log(`Generated RSS and sitemap with ${papers.length} records.`);

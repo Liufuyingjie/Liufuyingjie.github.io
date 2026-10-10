@@ -1,8 +1,10 @@
 export const site = {
   name: "YingJie",
+  tagline: "理解，而不是收藏。",
+  description: "记录论文里的问题、方法与证据，也记录自己的研究理解。",
   githubUrl: "https://github.com/Liufuyingjie",
-  // 部署 Cloudflare Worker 后，把这里改成 Worker 地址，例如：
-  // https://yingjie-research-notes-api.username.workers.dev
+  repoUrl: "https://github.com/Liufuyingjie/Liufuyingjie.github.io",
   apiBaseUrl: "https://yingjie-research-notes-api.1335322392.workers.dev",
-  homepageUrl: "https://Liufuyingjie.github.io",
+  homepageUrl: "https://liufuyingjie.github.io",
+  author: "Liufuyingjie",
 };

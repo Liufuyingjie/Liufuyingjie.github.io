@@ -8,3 +8,8 @@ worker/.dev.vars
 worker/.env
 worker/.env.*
 !worker/.dev.vars.example
+
+test-results/
+playwright-report/
+*.tsbuildinfo
+worker/.wrangler/

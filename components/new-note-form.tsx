@@ -1,339 +1,224 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
+import Icon from "./icons";
 import { site } from "../data/site";
+import { buildNoteMarkdown, emptyNoteInput, normalizeNoteInput, noteBody, plainText, templateBody, type NoteInput, type NoteTemplate } from "../shared/note-format";
 
-export type PaperFormState = {
-  title: string;
-  subtitle: string;
-  journal: string;
-  year: string;
-  authors: string;
-  affiliation: string;
-  code: string;
-  task: string;
-  model: string;
-  problem: string;
-  solution: string;
-  pipeline: string;
-  innovations: string;
-  experiments: string;
-  extensions: string;
-};
+export type PaperFormState = NoteInput;
+export const emptyPaperForm = emptyNoteInput;
+const SESSION_KEY = "yingjie-research-session";
+const templates: Array<{ id: NoteTemplate; name: string; hint: string }> = [
+  { id: "detailed", name: "完整论文", hint: "问题 · 方法 · 流程 · 实验" },
+  { id: "quick", name: "快速阅读", hint: "核心理解 · 证据 · 下一步" },
+  { id: "free", name: "研究随记", hint: "专题梳理，或自由写作" },
+];
 
-export const emptyPaperForm: PaperFormState = {
-  title: "",
-  subtitle: "",
-  journal: "",
-  year: "",
-  authors: "",
-  affiliation: "",
-  code: "",
-  task: "",
-  model: "",
-  problem: "",
-  solution: "",
-  pipeline: "",
-  innovations: "",
-  experiments: "",
-  extensions: "",
-};
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
+type TextKey = Exclude<keyof NoteInput, "kind" | "template">;
+function Field({ label, value, onChange, placeholder, multiline = false, required = false }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; required?: boolean;
 }) {
-  return (
-    <label className="note-field">
-      <span>{label}</span>
-      {multiline ? (
-        <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={8} />
-      ) : (
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-      )}
-    </label>
-  );
+  return <label className="note-field"><span>{label}{!required && <small>可选</small>}</span>{multiline ? <textarea rows={2} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}/> : <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} required={required}/>}</label>;
 }
 
-function normalizeApiBaseUrl(value: string) {
-  return value.replace(/\/$/, "");
-}
+type Props = { mode?: "new" | "edit"; slug?: string; sourceSha?: string; existingMetadata?: Record<string, unknown>; initialForm?: NoteInput };
+type Draft = { form: NoteInput; savedAt: string; sourceSha?: string };
 
-type NewNoteFormProps = {
-  mode?: "new" | "edit";
-  slug?: string;
-  initialForm?: PaperFormState;
-};
-
-export default function NewNoteForm({ mode = "new", slug, initialForm = emptyPaperForm }: NewNoteFormProps) {
+export default function NewNoteForm({ mode = "new", slug, sourceSha, existingMetadata, initialForm }: Props) {
   const editing = mode === "edit";
-  const [form, setForm] = useState<PaperFormState>(initialForm);
+  const [form, setForm] = useState<NoteInput>(() => initialForm || { ...emptyNoteInput, body: templateBody("detailed") });
+  const initialSnapshot = useRef(JSON.stringify(initialForm || { ...emptyNoteInput, body: templateBody("detailed") }));
+  const publishedSnapshot = useRef("");
+  const [tab, setTab] = useState<"write" | "preview">("write");
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
+  const [draftChecked, setDraftChecked] = useState(false);
+  const [draftStatus, setDraftStatus] = useState("仅保存在本机，发布后同步 GitHub");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [online, setOnline] = useState<boolean | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [login, setLogin] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [backendReady, setBackendReady] = useState(false);
+  const [backendMessage, setBackendMessage] = useState("");
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
+  const [redirecting, setRedirecting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loginRedirecting, setLoginRedirecting] = useState(false);
-  const [saved, setSaved] = useState<{ path: string; commitUrl?: string } | null>(null);
-  const [error, setError] = useState("");
-
-  const apiBaseUrl = useMemo(() => normalizeApiBaseUrl(site.apiBaseUrl), []);
-  const configured = !apiBaseUrl.includes("YOUR-WORKER.workers.dev");
+  const [saved, setSaved] = useState<{ path: string; commitUrl?: string; slug?: string } | null>(null);
+  const draftKey = `yingjie-note-draft:v5:${editing ? slug : "new"}`;
+  const api = site.apiBaseUrl.replace(/\/$/, "");
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.slice(1));
-    const hashToken = params.get("auth");
-    const authError = params.get("auth_error");
-    if (hashToken) {
-      localStorage.setItem("yingjie-research-session", hashToken);
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    } else if (authError) {
-      const messages: Record<string, string> = {
-        not_allowed: "这个 GitHub 账号没有写入权限，请使用 Liufuyingjie 登录。",
-        invalid_state: "登录状态校验失败，请重新点击 GitHub 登录。",
-        github_error: "GitHub 授权没有完成，请重新尝试。",
-      };
-      setError(messages[authError] || "GitHub 登录失败，请重新尝试。 ");
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    }
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Draft;
+        if (parsed?.form && typeof parsed.form.body === "string") setPendingDraft({ ...parsed, form: normalizeNoteInput(parsed.form as unknown as Record<string, unknown>) });
+      }
+    } catch { setDraftStatus("浏览器无法读取草稿，请及时导出 Markdown"); }
+    setDraftChecked(true);
+  }, [draftKey]);
 
-    const existing = localStorage.getItem("yingjie-research-session");
-    if (!existing || !configured) {
-      setToken(existing);
+  useEffect(() => {
+    if (!draftChecked || pendingDraft) return;
+    const snapshot = JSON.stringify(form);
+    if (snapshot === initialSnapshot.current || snapshot === publishedSnapshot.current) return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({ form, savedAt: new Date().toISOString(), sourceSha }));
+        setDraftStatus("草稿已自动保存在本机");
+      } catch { setDraftStatus("无法自动保存，请及时导出 Markdown"); }
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [form, draftKey, draftChecked, pendingDraft, sourceSha]);
+
+  useEffect(() => { setPreviewHtml(DOMPurify.sanitize(marked.parse(noteBody(form), { gfm: true }) as string)); }, [form]);
+
+  useEffect(() => {
+    const allowed = window.location.origin === new URL(site.homepageUrl).origin || window.location.origin === "http://localhost:3000";
+    setOnline(allowed);
+    if (!allowed) {
       setAuthLoading(false);
+      setBackendMessage("当前为改版预览，不会连接或修改你的线上仓库。可以写作、预览并导出 Markdown。");
       return;
     }
-
+    const controller = new AbortController();
+    let cancelled = false;
+    setAuthLoading(true);
+    let existing: string | null = null;
+    try {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const hashToken = params.get("auth");
+      const authError = params.get("auth_error");
+      if (hashToken) localStorage.setItem(SESSION_KEY, hashToken);
+      if (authError) {
+        const errors: Record<string, string> = { not_allowed: "请使用 Liufuyingjie 的 GitHub 账号登录。", invalid_state: "登录校验已过期，请重新登录。", github_error: "GitHub 授权未完成，请重试。" };
+        setError(errors[authError] || "登录未完成，请重新尝试。");
+      }
+      if (hashToken || authError) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      existing = localStorage.getItem(SESSION_KEY);
+    } catch { setError("浏览器禁止了本地存储，登录信息无法保存。请使用正常浏览模式。"); }
     setToken(existing);
-    fetch(`${apiBaseUrl}/api/me`, {
-      headers: { Authorization: `Bearer ${existing}` },
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("session-invalid");
-        return response.json() as Promise<{ login: string }>;
-      })
-      .then((data) => setLogin(data.login))
-      .catch(() => {
-        localStorage.removeItem("yingjie-research-session");
-        setToken(null);
-        setLogin(null);
-        setError("登录状态验证失败，请重新使用 GitHub 登录。 ");
-      })
-      .finally(() => setAuthLoading(false));
-  }, [apiBaseUrl, configured]);
+    async function health() {
+      try {
+        const response = await fetch(`${api}/health`, { signal: controller.signal });
+        if (!response.ok) throw new Error("health");
+        const data = await response.json() as { schemaVersion?: number; capabilities?: string[] };
+        if (cancelled) return;
+        const ready = Number(data.schemaVersion) >= 5 && data.capabilities?.includes("markdown-body") === true;
+        setBackendReady(ready);
+        setBackendMessage(ready ? "" : "保存服务仍是旧版。请先更新 Worker，再发布新模板；你的草稿可以先导出，不会被旧接口截断。");
+      } catch {
+        if (!cancelled) { setBackendReady(false); setBackendMessage("暂时无法连接保存服务。草稿仍保存在本机，可以导出 Markdown 后手动提交 GitHub。"); }
+      }
+    }
+    async function session() {
+      if (!existing) { if (!cancelled) setLogin(null); return; }
+      try {
+        const response = await fetch(`${api}/api/me`, { headers: { Authorization: `Bearer ${existing}` }, signal: controller.signal });
+        if (response.status === 401) {
+          try { localStorage.removeItem(SESSION_KEY); } catch {}
+          if (!cancelled) { setToken(null); setLogin(null); }
+          return;
+        }
+        if (!response.ok) throw new Error("session");
+        const data = await response.json() as { login: string };
+        if (!cancelled) setLogin(data.login);
+      } catch { if (!cancelled) setLogin(null); }
+    }
+    void Promise.all([health(), session()]).finally(() => { if (!cancelled) setAuthLoading(false); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [api, connectionAttempt]);
 
-  const set = (key: keyof PaperFormState) => (value: string) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const loginReturnPath = editing && slug ? `/papers/${encodeURIComponent(slug)}/edit/` : "/new/";
-
-  const startLogin = () => {
-    if (loginRedirecting) return;
-    setLoginRedirecting(true);
-    const returnTo = `${window.location.origin}${loginReturnPath}`;
-    window.location.assign(`${apiBaseUrl}/auth/login?return_to=${encodeURIComponent(returnTo)}`);
-  };
-
-  const logout = () => {
-    localStorage.removeItem("yingjie-research-session");
-    setToken(null);
-    setLogin(null);
+  function setField(key: TextKey, value: string) { setForm(current => ({ ...current, [key]: value })); setSaved(null); }
+  function chooseTemplate(template: NoteTemplate) {
+    const untouched = !form.body.trim() || form.body === templateBody(form.template);
+    setMessage(untouched ? "" : "模板已切换，原有正文完整保留。你可以直接调整标题与段落，无需按固定栏目填写。");
+    setForm({ ...form, kind: template === "free" ? "journal" : "paper", template, readingStatus: template === "free" ? "研究随记" : "阅读笔记", body: untouched ? templateBody(template) : form.body });
     setSaved(null);
-  };
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  }
+  function startLogin() {
+    if (!online || redirecting) return;
+    setRedirecting(true);
+    const returnPath = editing && slug ? `/papers/${encodeURIComponent(slug)}/edit/` : "/new/";
+    // External Worker OAuth navigation requires a full redirect, not Next.js routing.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`${api}/auth/login?return_to=${encodeURIComponent(window.location.origin + returnPath)}`);
+  }
+  function logout() { try { localStorage.removeItem(SESSION_KEY); } catch {} setToken(null); setLogin(null); }
+  function restoreDraft() {
+    if (!pendingDraft) return;
+    setForm(pendingDraft.form);
+    setMessage(pendingDraft.sourceSha && sourceSha && pendingDraft.sourceSha !== sourceSha ? "已恢复旧草稿，但远端笔记可能已经更新。请先核对正文，再发布。" : "本机草稿已恢复；它没有修改线上记录。");
+    setPendingDraft(null);
+    setDraftStatus("本机草稿已恢复");
+  }
+  function dismissDraft() { try { localStorage.removeItem(draftKey); } catch {} setPendingDraft(null); }
+  function exportMarkdown() {
+    const exportSlug = slug || `${form.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 55) || "note"}-${Date.now()}`;
+    const markdown = buildNoteMarkdown(form, exportSlug, editing ? existingMetadata : undefined);
+    const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${exportSlug}.md`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
-    setSaved(null);
-
-    if (!token) {
-      setError("请先使用 GitHub 登录。 ");
-      return;
-    }
-    if (!form.title.trim()) {
-      setError("请至少填写论文标题。 ");
-      return;
-    }
-    if (!configured) {
-      setError("还没有配置后端地址，请先在 data/site.ts 中填写 Cloudflare Worker 地址。 ");
-      return;
-    }
-    if (editing && !slug) {
-      setError("缺少论文标识，无法编辑。 ");
-      return;
-    }
-
+    setError(""); setSaved(null);
+    if (!form.title.trim()) { setError("请填写记录标题。"); return; }
+    if (!plainText(form.body.replace(/^#{1,6}[^\n]*$/gm, "")).trim()) { setError("请至少写下一段自己的理解，不能只发布空模板。"); return; }
+    if (!online) { setError("预览环境不会写入你的线上仓库，请导出 Markdown，或部署后再登录发布。"); return; }
+    if (!token || !login) { setError("草稿已保留，请先使用 GitHub 登录，再发布。"); return; }
+    if (!backendReady) { setError("保存服务需要更新或重新连接。为避免正文丢失，本次没有提交任何内容。"); return; }
+    if (editing && !slug) { setError("缺少记录标识，无法保存。"); return; }
     setSaving(true);
     try {
-      const endpoint = editing ? `${apiBaseUrl}/api/papers/${encodeURIComponent(slug as string)}` : `${apiBaseUrl}/api/papers`;
-      const response = await fetch(endpoint, {
+      const response = await fetch(editing ? `${api}/api/papers/${encodeURIComponent(slug!)}` : `${api}/api/papers`, {
         method: editing ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Research-Notes-Request": editing ? "edit-paper" : "save-paper",
-        },
-        body: JSON.stringify(form),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Research-Notes-Request": editing ? "edit-paper" : "save-paper" },
+        body: JSON.stringify({ ...form, ...(editing && sourceSha ? { expectedSha: sourceSha } : {}) }),
       });
-
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({})) as { error?: string; path: string; commitUrl?: string; slug?: string };
       if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem("yingjie-research-session");
-          setToken(null);
-          setLogin(null);
-        }
-        throw new Error(data.error || (editing ? "更新失败，请稍后重试。" : "保存失败，请稍后重试。 "));
+        if (response.status === 401) logout();
+        throw new Error(data.error || "保存未完成。你的草稿仍保存在本机，可以稍后重试或导出。");
       }
-
-      setSaved({ path: data.path, commitUrl: data.commitUrl });
-      if (!editing) setForm(emptyPaperForm);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : (editing ? "更新失败，请稍后重试。" : "保存失败，请稍后重试。 "));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (authLoading) {
-    return <div className="auth-card auth-card-loading">正在确认登录状态…</div>;
+      publishedSnapshot.current = JSON.stringify(form);
+      try { localStorage.removeItem(draftKey); } catch {}
+      setSaved({ path: data.path, commitUrl: data.commitUrl, slug: data.slug });
+      setDraftStatus("已提交 GitHub，等待自动部署");
+    } catch (err) { setError(err instanceof Error ? err.message : "保存失败，草稿已保留。"); }
+    finally { setSaving(false); }
   }
 
-  if (!configured) {
-    return (
-      <div className="auth-card">
-        <div className="auth-card-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 3.75 19 6.5v5.3c0 4.1-2.42 7.05-7 8.45-4.58-1.4-7-4.35-7-8.45V6.5l7-2.75Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-            <path d="m9.1 12.1 1.9 1.9 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div className="auth-card-copy">
-          <p className="section-label">保存服务</p>
-          <h2>还需要连接保存服务</h2>
-          <p>部署 Cloudflare Worker 后，把地址写进 <code>data/site.ts</code> 的 <code>apiBaseUrl</code>。</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!token || !login) {
-    return (
-      <div className="auth-card auth-card-login">
-        <div className="auth-card-icon github-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.09.67-3.74-1.3-3.74-1.3-.51-1.29-1.24-1.64-1.24-1.64-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1 1.56-.76 1.94-1.18-.99-.1-2.04-.5-2.04-2.23 0-.5.18-.92.47-1.25-.05-.12-.2-.6.05-1.24 0 0 .93-.3 3.05 1.2.89-.25 1.84-.38 2.79-.38.95 0 1.9.13 2.79.38 2.12-1.5 3.05-1.2 3.05-1.2.25.64.1 1.12.05 1.24.29.33.47.75.47 1.25 0 1.73-1.05 2.12-2.05 2.23.38.42.72 1.25.72 2.53v2.3c0 .31.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/>
-          </svg>
-        </div>
-        <div className="auth-card-copy">
-          <p className="section-label">仅作者可写</p>
-          <h2>{editing ? "编辑这篇论文笔记" : "新增一篇论文笔记"}</h2>
-          <p>通过 GitHub 验证身份。只有 <strong>@Liufuyingjie</strong> 可以保存或修改本站的论文记录。</p>
-          <button type="button" className="github-login-button" onClick={startLogin} disabled={loginRedirecting}>
-            <span className="github-login-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.09.67-3.74-1.3-3.74-1.3-.51-1.29-1.24-1.64-1.24-1.64-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 .1 1.56-.76 1.94-1.18-.99-.1-2.04-.5-2.04-2.23 0-.5.18-.92.47-1.25-.05-.12-.2-.6.05-1.24 0 0 .93-.3 3.05 1.2.89-.25 1.84-.38 2.79-.38.95 0 1.9.13 2.79.38 2.12-1.5 3.05-1.2 3.05-1.2.25.64.1 1.12.05 1.24.29.33.47.75.47 1.25 0 1.73-1.05 2.12-2.05 2.23.38.42.72 1.25.72 2.53v2.3c0 .31.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/>
-              </svg>
-            </span>
-            <span>{loginRedirecting ? "正在前往 GitHub…" : "使用 GitHub 登录"}</span>
-            <span className="github-login-arrow" aria-hidden="true">↗</span>
-          </button>
-          {error && <p className="form-error auth-card-error">{error}</p>}
-          <p className="auth-note">GitHub 仅用于验证你的身份，不会把账号密码提供给本站。</p>
-        </div>
-      </div>
-    );
-  }
-
-  const sections: Array<[string, string, keyof PaperFormState, string]> = [
-    ["02", "论文要解决的核心问题", "problem", "记录现有方法的不足、具体瓶颈，以及作者为什么要解决这个问题。"],
-    ["03", "核心解决方案", "solution", "按照模块拆解整篇方法，用自己的话说明它是怎么解决问题的。"],
-    ["04", "训练 / 推理完整流程", "pipeline", "从输入开始写清训练与推理的完整路径、损失函数和检索流程。"],
-    ["05", "核心创新点", "innovations", "记录关键设计，并说明每个设计解决了什么问题。"],
-    ["06", "实验效果", "experiments", "写清数据集、指标、baseline、性能变化以及消融实验。"],
-    ["07", "适用场景与扩展", "extensions", "记录适用范围、局限、可迁移设计，以及读完后的疑问。"],
+  const metadataFields: Array<[string, TextKey, string]> = [
+    ["发表年份 / 卷期", "year", "如 2026 · Vol. 28"], ["期刊 / 会议", "journal", "如 CVPR / TMM"],
+    ["论文链接", "paperUrl", "DOI、arXiv 或论文主页"], ["开源代码", "code", "GitHub / 项目主页"],
+    ["作者", "authors", "作者姓名"], ["单位", "affiliation", "学校 / 实验室"],
+    ["核心任务", "task", "图像检索 / VPR / FGIR"], ["模型名称", "model", "方法或模型名称"],
   ];
-
-  return (
-    <form className="new-note-form" onSubmit={handleSubmit}>
-      <div className="auth-strip">
-        <div>
-          <span className="auth-dot" />
-          已登录 {login}
-        </div>
-        <button type="button" onClick={logout}>退出</button>
-      </div>
-
-      <div className="form-section">
-        <div className="form-section-heading">
-          <span>01</span>
-          <div>
-            <p className="section-label">PAPER BASICS</p>
-            <h2>论文基础信息</h2>
-          </div>
-        </div>
-        <div className="field-grid two">
-          <Field label="论文标题" value={form.title} onChange={set("title")} placeholder="Rethinking Vision Transformer..." />
-          <Field label="中文标题" value={form.subtitle} onChange={set("subtitle")} placeholder="可选" />
-          <Field label="发表期刊" value={form.journal} onChange={set("journal")} placeholder="IEEE Transactions on Multimedia" />
-          <Field label="发表年份 / 卷期" value={form.year} onChange={set("year")} placeholder="2026 · Vol. 28" />
-          <Field label="作者" value={form.authors} onChange={set("authors")} placeholder="作者姓名" />
-          <Field label="单位" value={form.affiliation} onChange={set("affiliation")} placeholder="学校 / 实验室 / 机构" />
-          <Field label="开源代码" value={form.code} onChange={set("code")} placeholder="GitHub / 项目主页" />
-          <Field label="核心任务" value={form.task} onChange={set("task")} placeholder="图像检索 / VPR / FGIR ..." />
-          <Field label="模型名称" value={form.model} onChange={set("model")} placeholder="方法或模型名称" />
-        </div>
-      </div>
-
-      {sections.map(([number, title, key, placeholder]) => (
-        <div className="form-section" key={number}>
-          <div className="form-section-heading">
-            <span>{number}</span>
-            <div>
-              <p className="section-label">阅读笔记</p>
-              <h2>{title}</h2>
-            </div>
-          </div>
-          <Field
-            label="笔记内容"
-            value={form[key]}
-            onChange={set(key)}
-            placeholder={placeholder}
-            multiline
-          />
-          <p className="form-hint">支持 Markdown：空一行分段，使用 # / ## / - / ``` 等语法可以让阅读页面保持结构感。</p>
-        </div>
-      ))}
-
-      {error && <p className="form-error">{error}</p>}
-      {saved && (
-        <div className="save-success">
-          <span className="success-mark">✓</span>
-          <div>
-            <strong>{editing ? "论文记录已更新" : "已经写入 GitHub"}</strong>
-            <p>{saved.path} 已提交，GitHub Actions 会自动重新构建网站。</p>
-          </div>
-          {saved.commitUrl && <a href={saved.commitUrl} target="_blank" rel="noreferrer">查看提交 ↗</a>}
-        </div>
-      )}
-
-      <div className="form-actions">
-        <Link className="secondary-link" href={editing && slug ? `/papers/${slug}/` : "/#notes"}>取消</Link>
-        <button className="primary-button" type="submit" disabled={saving}>
-          {saving ? (editing ? "正在更新…" : "正在保存…") : (editing ? "保存修改" : "保存论文记录")} <span>↗</span>
-        </button>
-      </div>
-      <p className="storage-note">{editing ? "保存后会更新 GitHub 仓库中的原始 Markdown 笔记，并触发 GitHub Pages 自动部署。" : "保存后会在 GitHub 仓库创建一份 Markdown 笔记，并触发 GitHub Pages 自动部署。"}</p>
-    </form>
-  );
+  const textLength = plainText(form.body).length;
+  return <form onSubmit={submit} className="new-note-form">
+    <div className="writer-intro"><div><h2>{editing ? "编辑这篇笔记" : "选择一个起点"}</h2><p>只有标题和正文必填，写法由你决定。</p></div><span className="draft-status" aria-live="polite">{draftStatus}</span></div>
+    {pendingDraft && <div className="draft-recovery"><span>发现一份本机草稿{pendingDraft.savedAt ? ` · ${pendingDraft.savedAt.slice(0, 10)}` : ""}</span><div><button type="button" onClick={restoreDraft}>恢复草稿</button><button type="button" onClick={dismissDraft}>使用当前版本</button></div></div>}
+    <fieldset className="writer-fieldset" disabled={!!pendingDraft}>
+    <div className="template-picker" role="group" aria-label="选择笔记模板">{templates.map(t => <button key={t.id} type="button" className={`template-option ${form.template === t.id ? "active" : ""}`} onClick={() => chooseTemplate(t.id)} aria-pressed={form.template === t.id}><strong>{t.name}</strong><span>{t.hint}</span>{form.template === t.id && <Icon name="check" width="15" height="15"/>}</button>)}</div>
+    {message && <div className="writer-message" role="status">{message}</div>}
+    <div className="writer-fields"><div className="title-field"><Field label="记录标题" value={form.title} onChange={v => setField("title", v)} placeholder={form.kind === "paper" ? "这次读的是哪篇论文？" : "给这个想法起个名字"} required/></div><Field label="中文标题 / 副标题" value={form.subtitle} onChange={v => setField("subtitle", v)} placeholder="用一句话解释它在做什么"/><Field label="一句话理解 / 首页摘要" value={form.summary} onChange={v => setField("summary", v)} placeholder="留空时，会从正文自动提取摘要" multiline/><Field label="主题标签" value={form.tags} onChange={v => setField("tags", v)} placeholder="细粒度图像检索, Vision Transformer（用逗号分隔）"/></div>
+    <details className="meta-details"><summary>{form.kind === "paper" ? "论文基础信息" : "补充信息"}<span>可按需要填写，不必每项都写</span></summary><div className="field-grid">{metadataFields.map(([label, key, placeholder]) => <Field key={key} label={label} value={form[key]} onChange={v => setField(key, v)} placeholder={placeholder}/>)}</div></details>
+    <div className="editor-header"><div className="editor-tabs" role="group" aria-label="编辑器视图"><button type="button" className={tab === "write" ? "active" : ""} onClick={() => setTab("write")} aria-pressed={tab === "write"}>撰写</button><button type="button" className={tab === "preview" ? "active" : ""} onClick={() => setTab("preview")} aria-pressed={tab === "preview"}>预览</button></div><span>Markdown · {textLength} 字符</span></div>
+    {tab === "write" ? <textarea className="markdown-editor" aria-label="笔记正文" value={form.body} onChange={e => setField("body", e.target.value)} spellCheck={false} placeholder="从你的问题和理解开始。支持 Markdown 标题、列表、表格、代码与图片。"/> : <div className="editor-preview markdown-body" aria-label="Markdown 预览" dangerouslySetInnerHTML={{ __html: previewHtml }}/>}<p className="form-hint">用 ## 分段，用 - 写列表。支持代码块、表格、链接和图片；模板可以自由删改，不会强迫你填满每一栏。</p></fieldset>
+    {authLoading ? <div className="auth-card"><strong>正在确认保存服务…</strong></div> : online === false ? <div className="auth-card"><div><strong>预览模式 · 不会修改线上记录</strong><p>{backendMessage}</p></div><button className="github-login-button" type="button" onClick={exportMarkdown}><Icon name="download" width="15" height="15"/>导出草稿</button></div> : token && login ? <div className="auth-strip"><div><span className="auth-dot"/>已登录 @{login}</div><button type="button" onClick={logout}>退出登录</button></div> : <div className="auth-card"><div><strong>写作可以从现在开始，发布只对作者开放。</strong><p>通过 GitHub 验证身份，继续使用你原来的登录和自动发布流程。</p></div><button className="github-login-button" type="button" onClick={startLogin} disabled={redirecting}><Icon name="github" width="16" height="16"/>{redirecting ? "前往 GitHub…" : "GitHub 登录"}</button></div>}
+    {online && backendMessage && !authLoading && <div className="writer-message"><span>{backendMessage}</span><button type="button" className="text-link" style={{ marginLeft: 12 }} onClick={() => setConnectionAttempt(n => n + 1)}>重新连接</button></div>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+    {saved && <div className="save-success" role="status"><Icon name="check"/><div><strong>{editing ? "修改已提交，原文章链接不变。" : "笔记已写入 GitHub。"}</strong><p>GitHub Actions 将自动构建。部署完成后，刷新首页即可看到新内容。</p>{saved.commitUrl && <a href={saved.commitUrl} target="_blank" rel="noreferrer">查看 GitHub 提交 ↗</a>}</div></div>}
+    <div className="form-actions"><div><Link href={editing && slug ? `/papers/${slug}/` : "/"} className="secondary-link">返回</Link><button type="button" className="export-button" onClick={exportMarkdown}><Icon name="download" width="15" height="15"/>导出 Markdown</button></div><button className="primary-button" type="submit" disabled={saving || authLoading || !online || !backendReady || !token || !login}>{saving ? "正在提交…" : editing ? "保存修改" : "发布笔记"}<Icon name="arrow" width="16" height="16"/></button></div>
+    <p className="storage-note">本机草稿不会自动公开。发布会写入原来的 content/papers 目录，并触发 GitHub Pages 自动部署。</p>
+  </form>;
 }

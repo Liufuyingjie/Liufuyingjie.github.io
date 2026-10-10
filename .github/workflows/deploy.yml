@@ -27,7 +27,10 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Check content and types
+        run: npm run check
 
       - name: Build static site
         run: npm run build
