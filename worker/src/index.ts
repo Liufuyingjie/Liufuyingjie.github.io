@@ -26,6 +26,11 @@ const GH_API = "https://api.github.com";
 const GH_API_VERSION = "2026-03-10";
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+// 站点仓库（公开，只用来触发重新构建）。笔记仓库是 env.GITHUB_REPO_NAME（私有）。
+// 仓库改名时这里要一起改。
+const SITE_REPO_NAME = "Liufuyingjie.github.io";
+const SITE_DEPLOY_WORKFLOW = "deploy.yml";
+
 function corsHeaders(request: Request, env: Env) {
   const origin = request.headers.get("Origin") || "";
   const normalizedOrigin = origin.trim().replace(/\/$/, "").toLowerCase();
@@ -294,10 +299,10 @@ function encodeRepoContent(content: string) {
   return btoa(binary);
 }
 
-async function getInstallationToken(env: Env) {
+async function getInstallationTokenFor(env: Env, repo: string, permissions: Record<string, string>) {
   const appJwt = await createAppJwt(env);
   const installationResponse = await githubRequest(
-    `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/installation`,
+    `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(repo)}/installation`,
     {},
     appJwt,
   );
@@ -309,8 +314,8 @@ async function getInstallationToken(env: Env) {
     {
       method: "POST",
       body: JSON.stringify({
-        repositories: [env.GITHUB_REPO_NAME],
-        permissions: { contents: "write" },
+        repositories: [repo],
+        permissions,
       }),
     },
     appJwt,
@@ -318,6 +323,25 @@ async function getInstallationToken(env: Env) {
   if (!tokenResponse.ok) throw new Error(`GitHub 安装令牌获取失败：${tokenResponse.status}`);
   const token = (await tokenResponse.json()) as { token: string };
   return token.token;
+}
+
+// 写笔记用的令牌：只授权 contents:write，且只作用于私有笔记仓库。
+async function getInstallationToken(env: Env) {
+  if (env.GITHUB_REPO_NAME === SITE_REPO_NAME) {
+    throw new Error("配置异常：GITHUB_REPO_NAME 指向了公开站点仓库。为防笔记泄露，已阻止写入。");
+  }
+  return getInstallationTokenFor(env, env.GITHUB_REPO_NAME, { contents: "write" });
+}
+
+// 触发站点重建用的令牌：只授权 actions:write，读不到也改不了站点仓库的任何文件内容。
+async function triggerSiteRebuild(env: Env) {
+  const token = await getInstallationTokenFor(env, SITE_REPO_NAME, { actions: "write" });
+  const response = await githubRequest(
+    `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(SITE_REPO_NAME)}/actions/workflows/${encodeURIComponent(SITE_DEPLOY_WORKFLOW)}/dispatches`,
+    { method: "POST", body: JSON.stringify({ ref: "main" }) },
+    token,
+  );
+  if (!response.ok) throw new Error(`触发站点重建失败：${response.status}`);
 }
 
 async function exchangeCodeForUser(code: string, codeVerifier: string, env: Env) {
@@ -362,7 +386,7 @@ export default {
     }
 
     if (url.pathname === "/health" && method === "GET") {
-      return json(request, env, { ok: true, service: "yingjie-research-notes-api", schemaVersion: 5, capabilities: ["markdown-body", "journal", "metadata", "optimistic-edit"] });
+      return json(request, env, { ok: true, service: "yingjie-research-notes-api", schemaVersion: 5, capabilities: ["markdown-body", "journal", "metadata", "optimistic-edit", "site-rebuild"] });
     }
 
     if (url.pathname === "/auth/login" && method === "GET") {
@@ -465,11 +489,20 @@ export default {
           return json(request, env, { error: `写入 GitHub 失败（${response.status}）。` }, 502);
         }
 
+        // 笔记已写入私有仓库。顺手通知站点仓库重建；即便失败也不影响这次保存。
+        let siteRebuild: string = "triggered";
+        try {
+          await triggerSiteRebuild(env);
+        } catch (error) {
+          siteRebuild = `failed: ${error instanceof Error ? error.message : "unknown"}`;
+        }
+
         return json(request, env, {
           ok: true,
           slug,
           path: result.content?.path || path,
           commitUrl: result.commit?.html_url,
+          siteRebuild,
         }, 201);
       } catch (error) {
         return json(request, env, { error: error instanceof Error ? error.message : "保存论文时发生未知错误。" }, 502);
@@ -549,11 +582,20 @@ export default {
           return json(request, env, { error: `更新 GitHub 论文失败（${response.status}）。` }, 502);
         }
 
+        // 编辑同样要重建站点，否则网站上看到的还是旧内容。
+        let siteRebuild: string = "triggered";
+        try {
+          await triggerSiteRebuild(env);
+        } catch (error) {
+          siteRebuild = `failed: ${error instanceof Error ? error.message : "unknown"}`;
+        }
+
         return json(request, env, {
           ok: true,
           slug,
           path: result.content?.path || path,
           commitUrl: result.commit?.html_url,
+          siteRebuild,
         });
       } catch (error) {
         return json(request, env, { error: error instanceof Error ? error.message : "更新论文时发生未知错误。" }, 502);
