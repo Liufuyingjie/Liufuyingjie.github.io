@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+.DS_Store
+*.log
+worker/node_modules/
+worker/.dev.vars
+worker/.env
+worker/.env.*
+!worker/.dev.vars.example
+
+test-results/
+playwright-report/
+*.tsbuildinfo
+worker/.wrangler/
+
+# 论文笔记已迁移到私有仓库 Liufuyingjie/blog-content
+# 构建时由 GitHub Actions 用 CONTENT_TOKEN 拉取并注入到该目录
+content/papers/

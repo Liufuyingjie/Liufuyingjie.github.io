@@ -1,0 +1,37 @@
+[
+  {
+    "file": "content/papers/an-image-is-worth-16x16-words-transformers-for-image-recognition-at-scal-1789998208583-fsoj8z.md",
+    "sha256": "3a89de5c2767961cc0e3be790ff3cfdec7efa0e072f93f2daa49c2ec4ee98e38",
+    "unchanged": true
+  },
+  {
+    "file": "content/papers/anyloc-towards-universal-visual-place-recognition-1791510047892-h3hd36.md",
+    "sha256": "bcacd07d3a2bd4bd4400aa3ed216ea15273f92400db6eecfdbc0fa25aa381591",
+    "unchanged": true
+  },
+  {
+    "file": "content/papers/dit-distill-open-set-fine-grained-retrieval-via-generative-curriculum-kn-1789993613086-2nld72.md",
+    "sha256": "e323e78c714448a481f83f652ffd9dc0efb76d840b132d7e9c551a26c553cdd9",
+    "unchanged": true
+  },
+  {
+    "file": "content/papers/eet.md",
+    "sha256": "818e542952483244d6b8f1769360a4018468d2d361b341954a6961e19d6a3363",
+    "unchanged": true
+  },
+  {
+    "file": "content/papers/efficient-fine-grained-image-retrieval-with-vision-foundation-models-for-1789982572950-nm5wcq.md",
+    "sha256": "a79580b96102c48a9138f0782dfcf3e820a9e8cde01421934604c3662479f2ab",
+    "unchanged": true
+  },
+  {
+    "file": "content/papers/fine-grained-image-retrieval-via-dual-vision-adaptation-1790064199413-v4zi9r.md",
+    "sha256": "e104de1f55826087197f9cab0dc250e7350c4c1e5ca3f0c9d939dd74cdf49291",
+    "unchanged": true
+  },
+  {
+    "file": "content/papers/patch-1791535305273-r1mwk6.md",
+    "sha256": "b5ba48e2edaee60f047e4b60090a35b8b916d9309ebd17de32561758927448cc",
+    "unchanged": true
+  }
+]
