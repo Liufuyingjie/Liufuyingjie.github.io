@@ -3,6 +3,10 @@ name: Deploy Next.js to GitHub Pages
 on:
   push:
     branches: [main]
+  # 笔记存放在私有仓库，它的提交不会触发本仓库的 push 事件。
+  # 所以这里定时重建；想立刻发布时，到 Actions 页面手动点 "Run workflow"。
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:

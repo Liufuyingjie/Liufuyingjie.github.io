@@ -9,7 +9,7 @@
     "WORKER_PUBLIC_ORIGIN": "https://yingjie-research-notes-api.1335322392.workers.dev",
     "ALLOWED_ORIGINS": "https://liufuyingjie.github.io,http://localhost:3000",
     "GITHUB_REPO_OWNER": "Liufuyingjie",
-    "GITHUB_REPO_NAME": "Liufuyingjie.github.io",
+    "GITHUB_REPO_NAME": "blog-content",
     "ALLOWED_GITHUB_USERNAME": "Liufuyingjie"
   },
   "secrets": {
