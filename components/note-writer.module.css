@@ -1,0 +1,355 @@
+.page :global(.site-nav) {
+  position: sticky;
+  top: 0;
+  height: 64px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(12px);
+}
+
+.shell {
+  width: min(1220px, calc(100% - 64px));
+  margin-inline: auto;
+  padding: clamp(22px, 4vw, 52px) 0 64px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 18px;
+  padding-block-end: 17px;
+  border-bottom: 1px solid var(--line);
+}
+
+.back {
+  display: inline-flex;
+  color: var(--sidebar-text);
+  font-size: .875rem;
+  font-weight: 580;
+}
+
+.back:hover { color: var(--accent); }
+
+.header h1 {
+  margin: 5px 0 0;
+  font-size: clamp(1.9rem, 4vw, 2.85rem);
+  letter-spacing: -.045em;
+  line-height: 1.2;
+  animation: writer-heading-in var(--motion-slow) var(--motion-spring);
+}
+
+@keyframes writer-heading-in {
+  from { transform: translateY(4px); }
+  to { transform: none; }
+}
+
+.publishControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 18px;
+}
+
+.headerButtons, .recoveryButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.draftStatus {
+  color: var(--sidebar-text);
+  font-size: .8125rem;
+}
+
+.header .publishButton, .exportButton, .account .loginButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 7px 15px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: .875rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.exportButton {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+  transition:
+    background-color var(--motion-fast) var(--motion-standard),
+    scale var(--motion-medium) var(--motion-spring);
+}
+
+.exportButton:hover { background: var(--accent-soft); }
+.exportButton:active { scale: var(--pressed-scale); }
+
+.account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  min-height: 52px;
+  color: var(--sidebar-text);
+  font-size: .8125rem;
+}
+
+.account .loginButton {
+  min-height: 34px;
+  padding: 4px 11px;
+  border-color: var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-size: .8125rem;
+}
+
+.textButton {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: .8125rem;
+  font-weight: 600;
+}
+
+.textButton:hover { background: var(--surface); }
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 14px;
+  margin: 0 0 14px;
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+  border-radius: 9px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: .875rem;
+}
+
+.notice p { margin: 4px 0 0; }
+.notice a { text-decoration: underline; text-underline-offset: 3px; }
+
+.error {
+  border-color: light-dark(#e0b8b8, #705052);
+  color: light-dark(#9d302b, #f0afaa);
+  background: light-dark(#fff3f2, #36292b);
+}
+
+.workspace {
+  display: grid;
+  grid-template: "title settings" auto "editor settings" 1fr / minmax(0, 1fr) 234px;
+  gap: 14px 24px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.title, .paperInfo { grid-area: title; min-width: 0; }
+.editor { grid-area: editor; min-width: 0; }
+.settings { grid-area: settings; min-width: 0; align-self: start; }
+.settingsToggle { display: none; }
+
+.topLink {
+  display: table;
+  margin: 8px 0 0 auto;
+  padding: 3px 4px;
+  color: var(--accent);
+  font-size: .8125rem;
+}
+
+.topLink:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--sidebar-text);
+  font-size: .8125rem;
+}
+
+.field :is(input, textarea, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: .875rem;
+}
+
+.field textarea { resize: vertical; }
+.field :is(input, textarea)::placeholder { color: var(--sidebar-text); opacity: .8; }
+.field :is(input, textarea, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.paperInfo {
+  padding: 14px 15px 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 68%, var(--bg));
+}
+
+.paperInfoHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.paperInfoHeading h2 { margin: 0; font-size: 1rem; }
+.skipEditor { color: var(--accent); font-size: .8125rem; font-weight: 650; }
+.skipEditor:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.paperFields {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.paperTitle { grid-column: span 6; }
+.paperTitle input { font-weight: 600; }
+.venueType { grid-column: span 2; }
+.venueName { grid-column: span 4; }
+.publicationDate, .researchField { grid-column: span 3; }
+
+.title .field {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.title input {
+  padding: 10px 15px;
+  border-radius: 12px;
+  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  line-height: 1.45;
+}
+
+.templates, .details {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 68%, var(--bg));
+}
+
+.templates h2 {
+  margin: 0 0 8px;
+  font-size: .875rem;
+}
+
+.templateList {
+  display: grid;
+  gap: 5px;
+}
+
+.template {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 47px;
+  padding: 6px 27px 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  text-align: start;
+}
+
+.template:hover:not(:disabled) { background: var(--surface); }
+.template[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: var(--accent-soft);
+}
+
+.template strong { font-size: .875rem; }
+.template span { color: var(--sidebar-text); font-size: .75rem; line-height: 1.35; }
+.template svg { position: absolute; top: 12px; inset-inline-end: 8px; color: var(--accent); }
+
+.details {
+  margin-block-start: 8px;
+}
+
+.details summary {
+  color: var(--text);
+  cursor: pointer;
+  font-size: .875rem;
+  font-weight: 650;
+}
+
+.details summary span {
+  margin-inline-start: 4px;
+  color: var(--sidebar-text);
+  font-size: .75rem;
+  font-weight: 400;
+}
+
+.metadata {
+  display: grid;
+  gap: 12px;
+  margin-block-start: 11px;
+}
+
+@media (max-width: 940px) {
+  .workspace {
+    grid-template: "title" auto "settings" auto "editor" 1fr / minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .templates, .details { padding: 8px 10px; }
+  .templateList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .template { padding: 6px; text-align: center; }
+  .template svg { display: none; }
+  .metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 740px) {
+  .paperFields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .paperFields > .field { grid-column: auto; }
+}
+
+@media (max-width: 640px) {
+  .page :global(.site-nav) { height: 58px; }
+  .page :global(.nav-links) { top: 58px; }
+  .shell { width: calc(100% - 28px); padding: 21px 0 40px; }
+  .header { flex-wrap: wrap; gap: 12px; padding-bottom: 10px; }
+  .publishControls { width: 100%; justify-content: space-between; }
+  .account { min-height: 45px; }
+  .field :is(input, textarea, select) { font-size: 1rem; }
+  .paperInfo { padding: 11px; }
+  .paperFields > .paperTitle { grid-column: 1 / -1; }
+  .settingsToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 43px;
+    padding: 7px 11px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    font-size: .875rem;
+    font-weight: 650;
+  }
+  .settingsToggle span { color: var(--accent); font-size: .8125rem; }
+  .settingsContents { margin-block-start: 8px; }
+  .settingsContents[data-expanded="false"] { display: none; }
+  .template strong { font-size: .8125rem; }
+  .template span { display: none; }
+}
+
+@media (max-width: 340px) {
+  .metadata { grid-template-columns: minmax(0, 1fr); }
+}

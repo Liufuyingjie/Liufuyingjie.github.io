@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import MaterialMotion from "../components/material-motion";
 import { site } from "../data/site";
 import "./globals.css";
 export const metadata: Metadata = {
@@ -10,5 +11,5 @@ export const metadata: Metadata = {
 };
 const themeScript = `try{var t=localStorage.getItem('paper-notes-theme');document.documentElement.dataset.theme=t==='dark'?'dark':'light';}catch(e){document.documentElement.dataset.theme='light';}`;
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{ __html: themeScript }}/></head><body><a href="#main-content" className="skip-link">跳到主要内容</a>{children}</body></html>;
+  return <html lang="zh-CN" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{ __html: themeScript }}/></head><body><a href="#main-content" className="skip-link">跳到主要内容</a><MaterialMotion/>{children}</body></html>;
 }

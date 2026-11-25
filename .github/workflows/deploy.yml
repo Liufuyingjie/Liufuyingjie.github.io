@@ -34,11 +34,13 @@ jobs:
           token: ${{ secrets.CONTENT_TOKEN }}
           path: .notes
 
-      # 必须排在 npm run check 之前：tests/content.test.ts 会读真实笔记文件。
+      # 先注入笔记，再校验现有 Markdown。最后一篇笔记删除后，源目录可能不存在。
       - name: Place notes into content/papers
         run: |
           mkdir -p content/papers
-          cp -R .notes/content/papers/. content/papers/
+          if [ -d .notes/content/papers ]; then
+            cp -R .notes/content/papers/. content/papers/
+          fi
           echo "markdown notes found: $(find content/papers -name '*.md' | wc -l)"
 
       - name: Setup Node

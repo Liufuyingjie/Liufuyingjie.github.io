@@ -31,9 +31,9 @@ function inferredTags(title: string, data: Record<string, unknown>) {
 }
 
 function parsePaperFile(filename: string): Paper {
-  const raw = fs.readFileSync(path.join(PAPERS_DIR, filename), "utf8");
-  const contentSha = createHash("sha1").update(`blob ${Buffer.byteLength(raw)}\0`).update(raw).digest("hex");
-  const { header, body } = splitFrontMatter(raw);
+  const raw = fs.readFileSync(path.join(PAPERS_DIR, filename));
+  const contentSha = createHash("sha1").update(`blob ${raw.length}\0`).update(raw).digest("hex");
+  const { header, body } = splitFrontMatter(raw.toString("utf8"));
   const data = (header ? parse(header) : {}) as Record<string, unknown>;
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error(`${filename}: 无效的 Markdown 元数据`);
   const slug = str(data.slug) || filename.replace(/\.md$/, "");
@@ -74,6 +74,11 @@ export function getAllPapers(): Paper[] {
 }
 export const papers = getAllPapers();
 export function getPaper(slug: string) { return papers.find(p => p.slug === slug); }
+export function getPaperStaticParams() {
+  // The static exporter requires a parameter even when the last note is deleted.
+  // This reserved slug renders the existing 404 page.
+  return papers.length ? papers.map(({ slug }) => ({ slug })) : [{ slug: "_empty" }];
+}
 export function getTags() {
   const counts = new Map<string, number>();
   getAllPapers().forEach(p => p.tags.forEach(t => counts.set(t, (counts.get(t) || 0) + 1)));

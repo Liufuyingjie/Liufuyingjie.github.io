@@ -1,5 +1,5 @@
 import { parse } from "yaml";
-import { buildNoteMarkdown, normalizeNoteInput, splitFrontMatter, type NoteInput } from "../../shared/note-format";
+import { buildNoteMarkdown, normalizeNoteInput, parsePublicationDate, parseVenueType, splitFrontMatter } from "../../shared/note-format";
 
 interface Env {
   SITE_ORIGIN: string;
@@ -14,8 +14,6 @@ interface Env {
   GITHUB_PRIVATE_KEY: string;
   SESSION_SECRET: string;
 }
-
-type PaperInput = NoteInput & { expectedSha?: string };
 
 type SessionPayload = {
   login: string;
@@ -40,7 +38,7 @@ function corsHeaders(request: Request, env: Env) {
     .filter(Boolean);
 
   const headers = new Headers({
-    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Research-Notes-Request",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
@@ -281,8 +279,16 @@ function makeSlug(title: string) {
   return `${normalized || "paper"}-${Date.now()}-${suffix}`;
 }
 
-function buildMarkdown(input: PaperInput, slug: string, existing?: Record<string, unknown>) {
-  return buildNoteMarkdown(input, slug, existing);
+function publicationFieldsError(input: Record<string, unknown>) {
+  if (input.kind === "journal") return "";
+  if (input.venueType !== undefined && input.venueType !== "" && !parseVenueType(input.venueType)) {
+    return "发表类型请选择期刊或会议。";
+  }
+  const date = input.publicationDate;
+  if (date !== undefined && (typeof date !== "string" || (date.trim() && !parsePublicationDate(date)))) {
+    return "发表日期须为有效的年月日（YYYY-MM-DD）。";
+  }
+  return "";
 }
 
 function decodeRepoContent(value: string) {
@@ -344,6 +350,67 @@ async function triggerSiteRebuild(env: Env) {
   if (!response.ok) throw new Error(`触发站点重建失败：${response.status}`);
 }
 
+async function siteRebuildStatus(env: Env) {
+  try {
+    await triggerSiteRebuild(env);
+    return "triggered";
+  } catch (error) {
+    return `failed: ${error instanceof Error ? error.message : "unknown"}`;
+  }
+}
+
+async function deletePaper(request: Request, env: Env, slug: string) {
+  const session = await verifySession(request, env);
+  if (!session) return unauthorized(request, env);
+
+  if (request.headers.get("X-Research-Notes-Request") !== "delete-paper") {
+    return json(request, env, { error: "缺少请求校验头。" }, 403);
+  }
+
+  const input = await request.json().catch(() => null) as { expectedSha?: unknown } | null;
+  const expectedSha = input?.expectedSha;
+  if (typeof expectedSha !== "string" || !/^[a-f0-9]{40}$/.test(expectedSha)) {
+    return json(request, env, { error: "缺少有效的笔记版本，请重新打开笔记。" }, 400);
+  }
+
+  const path = `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/contents/content/papers/${encodeURIComponent(slug)}.md`;
+  const missing = { error: "这篇笔记已不在笔记仓库中，公开网页将在下次重建后更新。" };
+  const conflict = { error: "笔记已被更新。请等站点重建后刷新页面，核对最新内容再删除。" };
+
+  try {
+    const token = await getInstallationToken(env);
+    const existing = await githubRequest(`${path}?ref=main`, {}, token);
+    if (existing.status === 404) return json(request, env, missing, 404);
+    if (!existing.ok) return json(request, env, { error: `读取待删除笔记失败（${existing.status}）。` }, 502);
+
+    const file = await existing.json() as { sha?: string; type?: string };
+    if (file.type !== "file" || !file.sha) {
+      return json(request, env, { error: "无法识别待删除的笔记文件。" }, 502);
+    }
+    if (file.sha !== expectedSha) return json(request, env, conflict, 409);
+
+    const deleted = await githubRequest(path, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: `Delete note: ${slug}`, sha: expectedSha, branch: "main" }),
+    }, token);
+
+    if (deleted.status === 404) return json(request, env, missing, 404);
+    if (deleted.status === 409) return json(request, env, conflict, 409);
+    if (!deleted.ok) return json(request, env, { error: `删除笔记失败（${deleted.status}）。` }, 502);
+
+    const result = await deleted.json().catch(() => ({})) as { commit?: { html_url?: string } };
+    return json(request, env, {
+      ok: true,
+      slug,
+      commitUrl: result.commit?.html_url,
+      siteRebuild: await siteRebuildStatus(env),
+    });
+  } catch (error) {
+    return json(request, env, { error: error instanceof Error ? error.message : "删除笔记时发生未知错误。" }, 502);
+  }
+}
+
 async function exchangeCodeForUser(code: string, codeVerifier: string, env: Env) {
   const redirectUri = `${env.WORKER_PUBLIC_ORIGIN.replace(/\/$/, "")}/auth/callback`;
   const response = await fetch("https://github.com/login/oauth/access_token", {
@@ -386,7 +453,7 @@ export default {
     }
 
     if (url.pathname === "/health" && method === "GET") {
-      return json(request, env, { ok: true, service: "yingjie-research-notes-api", schemaVersion: 5, capabilities: ["markdown-body", "journal", "metadata", "optimistic-edit", "site-rebuild"] });
+      return json(request, env, { ok: true, service: "yingjie-research-notes-api", schemaVersion: 7, capabilities: ["markdown-body", "journal", "metadata", "optimistic-edit", "site-rebuild", "delete-paper", "paper-publication-fields"] });
     }
 
     if (url.pathname === "/auth/login" && method === "GET") {
@@ -450,9 +517,9 @@ export default {
         return json(request, env, { error: "缺少请求校验头。" }, 403);
       }
 
-      let input: PaperInput;
+      let input: Record<string, unknown>;
       try {
-        input = await request.json() as PaperInput;
+        input = await request.json() as Record<string, unknown>;
       } catch {
         return json(request, env, { error: "提交的数据不是有效 JSON。" }, 400);
       }
@@ -461,13 +528,15 @@ export default {
         return json(request, env, { error: "论文标题不能为空。" }, 400);
       }
 
-      const normalized: PaperInput = normalizeNoteInput(input as unknown as Record<string, unknown>);
+      const fieldsError = publicationFieldsError(input);
+      if (fieldsError) return json(request, env, { error: fieldsError }, 400);
+      const normalized = normalizeNoteInput(input);
       if (normalized.body.length > 500_000) return json(request, env, { error: "正文过长，请分成多篇笔记。" }, 400);
 
       if (normalized.title.length > 300) return json(request, env, { error: "论文标题过长。" }, 400);
       const slug = makeSlug(normalized.title);
       const path = `content/papers/${slug}.md`;
-      const content = buildMarkdown(normalized, slug);
+      const content = buildNoteMarkdown(normalized, slug);
 
       try {
         const token = await getInstallationToken(env);
@@ -489,28 +558,22 @@ export default {
           return json(request, env, { error: `写入 GitHub 失败（${response.status}）。` }, 502);
         }
 
-        // 笔记已写入私有仓库。顺手通知站点仓库重建；即便失败也不影响这次保存。
-        let siteRebuild: string = "triggered";
-        try {
-          await triggerSiteRebuild(env);
-        } catch (error) {
-          siteRebuild = `failed: ${error instanceof Error ? error.message : "unknown"}`;
-        }
-
         return json(request, env, {
           ok: true,
           slug,
           path: result.content?.path || path,
           commitUrl: result.commit?.html_url,
-          siteRebuild,
+          siteRebuild: await siteRebuildStatus(env),
         }, 201);
       } catch (error) {
         return json(request, env, { error: error instanceof Error ? error.message : "保存论文时发生未知错误。" }, 502);
       }
     }
 
-    const editMatch = url.pathname.match(/^\/api\/papers\/([a-z0-9-]+)$/i);
-    if (editMatch && method === "PUT") {
+    const paperMatch = url.pathname.match(/^\/api\/papers\/([a-z0-9-]+)$/i);
+    if (paperMatch && method === "DELETE") return deletePaper(request, env, paperMatch[1]);
+
+    if (paperMatch && method === "PUT") {
       const session = await verifySession(request, env);
       if (!session) return unauthorized(request, env);
 
@@ -518,10 +581,10 @@ export default {
         return json(request, env, { error: "缺少请求校验头。" }, 403);
       }
 
-      const slug = editMatch[1];
-      let input: PaperInput;
+      const slug = paperMatch[1];
+      let input: Record<string, unknown>;
       try {
-        input = await request.json() as PaperInput;
+        input = await request.json() as Record<string, unknown>;
       } catch {
         return json(request, env, { error: "提交的数据不是有效 JSON。" }, 400);
       }
@@ -530,7 +593,9 @@ export default {
         return json(request, env, { error: "论文标题不能为空。" }, 400);
       }
 
-      const normalized: PaperInput = normalizeNoteInput(input as unknown as Record<string, unknown>);
+      const fieldsError = publicationFieldsError(input);
+      if (fieldsError) return json(request, env, { error: fieldsError }, 400);
+      const normalized = normalizeNoteInput(input);
       if (normalized.body.length > 500_000) return json(request, env, { error: "正文过长，请分成多篇笔记。" }, 400);
 
       if (normalized.title.length > 300) return json(request, env, { error: "论文标题过长。" }, 400);
@@ -561,7 +626,7 @@ export default {
         if (!originalMetadata || typeof originalMetadata !== "object" || Array.isArray(originalMetadata)) {
           return json(request, env, { error: "原笔记元数据格式异常，已取消更新。" }, 400);
         }
-        const content = buildMarkdown(normalized, slug, originalMetadata);
+        const content = buildNoteMarkdown(normalizeNoteInput(input, originalMetadata), slug, originalMetadata);
         const response = await githubRequest(
           `/repos/${encodeURIComponent(env.GITHUB_REPO_OWNER)}/${encodeURIComponent(env.GITHUB_REPO_NAME)}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
           {
@@ -582,20 +647,12 @@ export default {
           return json(request, env, { error: `更新 GitHub 论文失败（${response.status}）。` }, 502);
         }
 
-        // 编辑同样要重建站点，否则网站上看到的还是旧内容。
-        let siteRebuild: string = "triggered";
-        try {
-          await triggerSiteRebuild(env);
-        } catch (error) {
-          siteRebuild = `failed: ${error instanceof Error ? error.message : "unknown"}`;
-        }
-
         return json(request, env, {
           ok: true,
           slug,
           path: result.content?.path || path,
           commitUrl: result.commit?.html_url,
-          siteRebuild,
+          siteRebuild: await siteRebuildStatus(env),
         });
       } catch (error) {
         return json(request, env, { error: error instanceof Error ? error.message : "更新论文时发生未知错误。" }, 502);

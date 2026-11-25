@@ -1,5 +1,5 @@
 import type { SVGProps } from "react";
-export default function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: "search" | "github" | "pen" | "arrow" | "sun" | "moon" | "menu" | "close" | "download" | "check" }) {
+export default function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: "search" | "github" | "pen" | "arrow" | "sun" | "moon" | "menu" | "close" | "download" | "check" | "trash" }) {
   const paths = {
     search: <><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.3 4.3"/></>,
     github: <><path d="M8.5 20.5v-3.1c-3 .7-3.8-1.3-3.8-1.3M15.5 20.5v-4c0-1 .1-1.7-.5-2.3 3.2-.4 4.5-1.9 4.5-4.4 0-1.1-.4-2-1.1-2.8.3-.9.2-2-.3-2.8-1-.1-2.5.6-3.2 1-1.8-.4-3.7-.4-5.4 0-.8-.4-2.3-1.1-3.2-1-.5.8-.6 1.9-.3 2.8-.7.8-1.1 1.7-1.1 2.8 0 2.5 1.3 4 4.5 4.4-.6.6-.5 1.3-.5 2.3v4"/></>,
@@ -11,6 +11,7 @@ export default function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { nam
     close: <path d="m5 5 14 14M5 19 19 5"/>,
     download: <><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></>,
     check: <path d="m5 12 4 4L19 6"/>,
+    trash: <><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></>,
   };
   return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]}</svg>;
 }

@@ -1,0 +1,65 @@
+.waves {
+  position: absolute;
+  z-index: 2;
+  inset: auto 0 -1px;
+  height: clamp(44px, 6.4vw, 70px);
+  overflow: hidden;
+  color: var(--bg);
+  pointer-events: none;
+}
+
+.waveTrack {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 200%;
+  height: 100%;
+  transform: translateX(var(--wave-rest));
+}
+
+.distant {
+  --wave-duration: 29s;
+  --wave-delay: -6s;
+  --wave-rest: -10.35%;
+  fill-opacity: .24;
+}
+
+.middle {
+  --wave-duration: 23s;
+  --wave-delay: -13s;
+  --wave-rest: -21.74%;
+  --wave-direction: reverse;
+  fill-opacity: .55;
+}
+
+.near {
+  --wave-duration: 19s;
+  --wave-delay: -11s;
+  --wave-rest: -28.95%;
+}
+
+.foam {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 55%, #cff7f6);
+  stroke-opacity: .32;
+  stroke-width: 1.2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .waveTrack {
+    animation: wave-drift var(--wave-duration) linear var(--wave-delay) infinite var(--wave-direction, normal);
+  }
+
+  .homeTitle {
+    animation: title-settle 620ms var(--motion-spring);
+  }
+}
+
+@keyframes wave-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes title-settle {
+  from { transform: translateY(6px) scale(.975); }
+  to { transform: translateY(0) scale(1); }
+}

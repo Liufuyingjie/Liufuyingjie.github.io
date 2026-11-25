@@ -24,7 +24,7 @@ export default function NotesExplorer({ items, mode = "home" }: { items: Item[];
   const activePage = Math.min(page, pages);
   const visible = filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
   const changeTag = (value: string) => { setTag(value === tag ? "" : value); setPage(1); };
-  function goToPage(value: number) { setPage(value); document.getElementById("notes")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  function goToPage(value: number) { setPage(value); document.getElementById("notes")?.scrollIntoView({ block: "start" }); }
   return <section className="notes-section" id="notes" aria-label="笔记列表">
     <div className="list-toolbar"><div className="list-tabs" role="group" aria-label="按记录类型筛选">{[["all", "全部记录"], ["paper", "论文笔记"], ["journal", "研究随记"]].map(([value, label]) => <button type="button" key={value} className={kind === value ? "selected" : ""} onClick={() => { setKind(value); setPage(1); }} aria-pressed={kind === value}>{label}{value === "all" && <span>{items.length}</span>}</button>)}</div><Link className="list-write" href="/new/" aria-label="写一篇新笔记"><Icon name="pen" width="16" height="16"/><span>写笔记</span></Link></div>
     {mode !== "home" && <div className="search-box"><Icon name="search"/><input type="search" aria-label="搜索笔记" placeholder="搜索标题、正文、模型或一个关键词…" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} autoFocus={mode === "search"}/>{query && <button type="button" className="icon-button" aria-label="清空搜索" onClick={() => setQuery("")}><Icon name="close" width="17" height="17"/></button>}</div>}
